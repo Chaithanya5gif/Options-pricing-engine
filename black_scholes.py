@@ -1,4 +1,5 @@
 import math
+import matplotlib.pyplot as plt
 
 
 def norm_cdf(x):
@@ -55,18 +56,68 @@ def black_scholes(S, K, T, r, sigma):
     return call_price, put_price
 
 
-# ── Verification ────────────────────────────────────────────────────────────
+def black_scholes_delta(S, K, T, r, sigma):
+    """
+    Calculate Delta for European call and put options.
+
+    Parameters
+    ----------
+    S     : float  Current stock price
+    K     : float  Strike price
+    T     : float  Time to expiry in years
+    r     : float  Risk-free interest rate (annualised, continuous)
+    sigma : float  Volatility of the underlying (annualised)
+
+    Returns
+    -------
+    call_delta : float
+    put_delta  : float
+    """
+    d1 = (math.log(S / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * math.sqrt(T))
+    call_delta = norm_cdf(d1)
+    put_delta = call_delta - 1.0
+    return call_delta, put_delta
+
+
+# ── Verification & Plotting ──────────────────────────────────────────────────
 if __name__ == "__main__":
-    S, K, T, r, sigma = 100, 100, 1, 0.05, 0.2
+    K, T, r, sigma = 100, 1, 0.05, 0.2
 
-    call, put = black_scholes(S, K, T, r, sigma)
-
-    print(f"S={S}, K={K}, T={T}, r={r}, sigma={sigma}")
+    # 1. Verification of pricing & parity
+    S_atm = 100
+    call, put = black_scholes(S_atm, K, T, r, sigma)
+    print(f"Pricing verification for ATM option (S={S_atm}, K={K}):")
     print(f"  Call price : {call:.4f}  (expected ≈ 10.45)")
     print(f"  Put  price : {put:.4f}")
 
-    # Put-Call Parity check: C - P = S - K*e^(-rT)
+    # Put-Call Parity check
     parity_lhs = call - put
-    parity_rhs = S - K * math.exp(-r * T)
-    print(f"\nPut-Call Parity check: C - P = {parity_lhs:.4f}, S - PV(K) = {parity_rhs:.4f}")
-    print(f"  Parity holds: {math.isclose(parity_lhs, parity_rhs)}")
+    parity_rhs = S_atm - K * math.exp(-r * T)
+    print(f"  Put-Call Parity holds: {math.isclose(parity_lhs, parity_rhs)}\n")
+
+    # 2. Verification of Delta behavior (ATM, deep ITM, deep OTM)
+    print("Delta verification:")
+    for S_test, label in [(100, "ATM"), (150, "Deep ITM Call / OTM Put"), (50, "Deep OTM Call / ITM Put")]:
+        c_delta, p_delta = black_scholes_delta(S_test, K, T, r, sigma)
+        print(f"  S = {S_test:3d} ({label:23s}) -> Call Delta = {c_delta:6.4f}, Put Delta = {p_delta:6.4f}")
+
+    # 3. Generate Delta vs Spot Price plot
+    spot_prices = [s for s in range(50, 151)]
+    call_deltas = []
+    put_deltas = []
+    for s in spot_prices:
+        c_d, p_d = black_scholes_delta(s, K, T, r, sigma)
+        call_deltas.append(c_d)
+        put_deltas.append(p_d)
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(spot_prices, call_deltas, label="Call Delta", color="#2563eb", lw=2)
+    plt.plot(spot_prices, put_deltas, label="Put Delta", color="#dc2626", lw=2)
+    plt.axvline(x=K, color="#6b7280", linestyle="--", label=f"Strike Price (K={K})")
+    plt.xlabel("Spot Price (S)")
+    plt.ylabel("Delta")
+    plt.title("Black-Scholes Delta vs. Spot Price")
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.savefig("delta_vs_spot.png", dpi=300)
+    print("\nDelta vs Spot Price plot saved as 'delta_vs_spot.png'.")
