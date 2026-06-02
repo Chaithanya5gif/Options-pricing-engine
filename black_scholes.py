@@ -119,6 +119,27 @@ def black_scholes_rho(S, K, T, r, sigma):
     return call_rho, put_rho
 
 
+def implied_vol(market_price, S, K, T, r, option_type="call"):
+    """
+    Calculate the implied volatility of a European option using the Newton-Raphson method.
+    
+    Parameters
+    ----------
+    market_price : float  Observed option price
+    S            : float  Current stock price
+    K            : float  Strike price
+    T            : float  Time to expiry in years
+    r            : float  Risk-free interest rate (annualised, continuous)
+    option_type  : str    "call" or "put"
+
+    Returns
+    -------
+    sigma : float  Implied volatility (placeholder for now)
+    """
+    # Skeleton placeholder for Newton-Raphson loop (Day 3)
+    return 0.2
+
+
 # ── Verification & Plotting ──────────────────────────────────────────────────
 if __name__ == "__main__":
     K, T, r, sigma = 100, 1, 0.05, 0.2
