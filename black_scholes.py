@@ -26,6 +26,13 @@ def norm_cdf(x):
     return cdf_positive if x >= 0 else 1.0 - cdf_positive
 
 
+def norm_pdf(x):
+    """
+    Probability density function of the standard normal distribution.
+    """
+    return (1.0 / math.sqrt(2 * math.pi)) * math.exp(-0.5 * x ** 2)
+
+
 def black_scholes(S, K, T, r, sigma):
     """
     Black-Scholes European option pricing (pure Python).
@@ -59,24 +66,57 @@ def black_scholes(S, K, T, r, sigma):
 def black_scholes_delta(S, K, T, r, sigma):
     """
     Calculate Delta for European call and put options.
-
-    Parameters
-    ----------
-    S     : float  Current stock price
-    K     : float  Strike price
-    T     : float  Time to expiry in years
-    r     : float  Risk-free interest rate (annualised, continuous)
-    sigma : float  Volatility of the underlying (annualised)
-
-    Returns
-    -------
-    call_delta : float
-    put_delta  : float
     """
     d1 = (math.log(S / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * math.sqrt(T))
     call_delta = norm_cdf(d1)
     put_delta = call_delta - 1.0
     return call_delta, put_delta
+
+
+def black_scholes_gamma(S, K, T, r, sigma):
+    """
+    Calculate Gamma for European call and put options.
+    """
+    d1 = (math.log(S / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * math.sqrt(T))
+    gamma = norm_pdf(d1) / (S * sigma * math.sqrt(T))
+    return gamma
+
+
+def black_scholes_vega(S, K, T, r, sigma):
+    """
+    Calculate Vega for European call and put options.
+    """
+    d1 = (math.log(S / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * math.sqrt(T))
+    vega = S * norm_pdf(d1) * math.sqrt(T)
+    return vega
+
+
+def black_scholes_theta(S, K, T, r, sigma):
+    """
+    Calculate Theta for European call and put options.
+    """
+    d1 = (math.log(S / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * math.sqrt(T))
+    d2 = d1 - sigma * math.sqrt(T)
+    
+    first_term = -(S * norm_pdf(d1) * sigma) / (2.0 * math.sqrt(T))
+    second_term_call = r * K * math.exp(-r * T) * norm_cdf(d2)
+    second_term_put = r * K * math.exp(-r * T) * norm_cdf(-d2)
+    
+    call_theta = first_term - second_term_call
+    put_theta = first_term + second_term_put
+    return call_theta, put_theta
+
+
+def black_scholes_rho(S, K, T, r, sigma):
+    """
+    Calculate Rho for European call and put options.
+    """
+    d1 = (math.log(S / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * math.sqrt(T))
+    d2 = d1 - sigma * math.sqrt(T)
+    
+    call_rho = K * T * math.exp(-r * T) * norm_cdf(d2)
+    put_rho = -K * T * math.exp(-r * T) * norm_cdf(-d2)
+    return call_rho, put_rho
 
 
 # ── Verification & Plotting ──────────────────────────────────────────────────
@@ -95,29 +135,85 @@ if __name__ == "__main__":
     parity_rhs = S_atm - K * math.exp(-r * T)
     print(f"  Put-Call Parity holds: {math.isclose(parity_lhs, parity_rhs)}\n")
 
-    # 2. Verification of Delta behavior (ATM, deep ITM, deep OTM)
-    print("Delta verification:")
-    for S_test, label in [(100, "ATM"), (150, "Deep ITM Call / OTM Put"), (50, "Deep OTM Call / ITM Put")]:
-        c_delta, p_delta = black_scholes_delta(S_test, K, T, r, sigma)
-        print(f"  S = {S_test:3d} ({label:23s}) -> Call Delta = {c_delta:6.4f}, Put Delta = {p_delta:6.4f}")
+    # 2. Verification of Greek behaviors
+    print("Greeks verification (ATM, S=100):")
+    c_delta, p_delta = black_scholes_delta(S_atm, K, T, r, sigma)
+    gamma = black_scholes_gamma(S_atm, K, T, r, sigma)
+    vega = black_scholes_vega(S_atm, K, T, r, sigma)
+    c_theta, p_theta = black_scholes_theta(S_atm, K, T, r, sigma)
+    c_rho, p_rho = black_scholes_rho(S_atm, K, T, r, sigma)
+    
+    print(f"  Delta: Call = {c_delta:.4f}, Put = {p_delta:.4f}")
+    print(f"  Gamma: {gamma:.4f}")
+    print(f"  Vega : {vega:.4f}")
+    print(f"  Theta: Call = {c_theta:.4f}, Put = {p_theta:.4f}")
+    print(f"  Rho  : Call = {c_rho:.4f}, Put = {p_rho:.4f}\n")
 
-    # 3. Generate Delta vs Spot Price plot
-    spot_prices = [s for s in range(50, 151)]
-    call_deltas = []
-    put_deltas = []
-    for s in spot_prices:
-        c_d, p_d = black_scholes_delta(s, K, T, r, sigma)
-        call_deltas.append(c_d)
-        put_deltas.append(p_d)
+    # 3. Generate the 5-Greeks Dashboard
+    fig, axs = plt.subplots(2, 3, figsize=(16, 10))
+    fig.suptitle("Black-Scholes Option Greeks Dashboard", fontsize=16, fontweight='bold')
 
-    plt.figure(figsize=(10, 6))
-    plt.plot(spot_prices, call_deltas, label="Call Delta", color="#2563eb", lw=2)
-    plt.plot(spot_prices, put_deltas, label="Put Delta", color="#dc2626", lw=2)
-    plt.axvline(x=K, color="#6b7280", linestyle="--", label=f"Strike Price (K={K})")
-    plt.xlabel("Spot Price (S)")
-    plt.ylabel("Delta")
-    plt.title("Black-Scholes Delta vs. Spot Price")
-    plt.legend()
-    plt.grid(True, alpha=0.3)
-    plt.savefig("delta_vs_spot.png", dpi=300)
-    print("\nDelta vs Spot Price plot saved as 'delta_vs_spot.png'.")
+    # Subplot 1: Delta vs Spot Price
+    spot_prices = list(range(50, 151))
+    call_deltas = [black_scholes_delta(s, K, T, r, sigma)[0] for s in spot_prices]
+    put_deltas = [black_scholes_delta(s, K, T, r, sigma)[1] for s in spot_prices]
+    axs[0, 0].plot(spot_prices, call_deltas, label="Call Delta", color="#2563eb", lw=2)
+    axs[0, 0].plot(spot_prices, put_deltas, label="Put Delta", color="#dc2626", lw=2)
+    axs[0, 0].axvline(x=K, color="#6b7280", linestyle="--", label=f"Strike (K={K})")
+    axs[0, 0].set_xlabel("Spot Price (S)")
+    axs[0, 0].set_ylabel("Delta")
+    axs[0, 0].set_title("Delta vs. Spot Price")
+    axs[0, 0].legend()
+    axs[0, 0].grid(True, alpha=0.3)
+
+    # Subplot 2: Gamma vs Spot Price
+    gammas = [black_scholes_gamma(s, K, T, r, sigma) for s in spot_prices]
+    axs[0, 1].plot(spot_prices, gammas, label="Gamma", color="#7c3aed", lw=2)
+    axs[0, 1].axvline(x=K, color="#6b7280", linestyle="--", label=f"Strike (K={K})")
+    axs[0, 1].set_xlabel("Spot Price (S)")
+    axs[0, 1].set_ylabel("Gamma")
+    axs[0, 1].set_title("Gamma vs. Spot Price (Peaks at ATM)")
+    axs[0, 1].legend()
+    axs[0, 1].grid(True, alpha=0.3)
+
+    # Subplot 3: Vega vs Volatility
+    volatilities = [v / 100.0 for v in range(5, 81)]
+    vegas = [black_scholes_vega(S_atm, K, T, r, v) for v in volatilities]
+    axs[0, 2].plot([v * 100 for v in volatilities], vegas, label="Vega", color="#059669", lw=2)
+    axs[0, 2].set_xlabel("Volatility (%)")
+    axs[0, 2].set_ylabel("Vega")
+    axs[0, 2].set_title("Vega vs. Volatility")
+    axs[0, 2].legend()
+    axs[0, 2].grid(True, alpha=0.3)
+
+    # Subplot 4: Theta vs Time to Expiry
+    times = [t / 100.0 for t in range(1, 201)]
+    call_thetas = [black_scholes_theta(S_atm, K, t, r, sigma)[0] for t in times]
+    put_thetas = [black_scholes_theta(S_atm, K, t, r, sigma)[1] for t in times]
+    axs[1, 0].plot(times, call_thetas, label="Call Theta", color="#d97706", lw=2)
+    axs[1, 0].plot(times, put_thetas, label="Put Theta", color="#db2777", lw=2)
+    axs[1, 0].set_xlabel("Time to Expiry (Years)")
+    axs[1, 0].set_ylabel("Theta")
+    axs[1, 0].set_title("Theta vs. Time to Expiry")
+    axs[1, 0].legend()
+    axs[1, 0].grid(True, alpha=0.3)
+
+    # Subplot 5: Rho vs Interest Rate
+    rates = [ri / 100.0 for ri in range(0, 21)]
+    call_rhos = [black_scholes_rho(S_atm, K, T, ri, sigma)[0] for ri in rates]
+    put_rhos = [black_scholes_rho(S_atm, K, T, ri, sigma)[1] for ri in rates]
+    axs[1, 1].plot([ri * 100 for ri in rates], call_rhos, label="Call Rho", color="#0284c7", lw=2)
+    axs[1, 1].plot([ri * 100 for ri in rates], put_rhos, label="Put Rho", color="#b91c1c", lw=2)
+    axs[1, 1].set_xlabel("Interest Rate (%)")
+    axs[1, 1].set_ylabel("Rho")
+    axs[1, 1].set_title("Rho vs. Interest Rate")
+    axs[1, 1].legend()
+    axs[1, 1].grid(True, alpha=0.3)
+
+    # Subplot 6: Remove empty slot
+    fig.delaxes(axs[1, 2])
+
+    plt.tight_layout()
+    plt.savefig("greeks_dashboard.png", dpi=300)
+    print("Greeks dashboard saved as 'greeks_dashboard.png'.")
+
