@@ -1,5 +1,6 @@
 import math
 import matplotlib.pyplot as plt
+import scipy.optimize
 
 
 def norm_cdf(x):
@@ -134,10 +135,46 @@ def implied_vol(market_price, S, K, T, r, option_type="call"):
 
     Returns
     -------
-    sigma : float  Implied volatility (placeholder for now)
+    sigma : float  Implied volatility
     """
-    # Skeleton placeholder for Newton-Raphson loop (Day 3)
-    return 0.2
+    MAX_ITERATIONS = 100
+    TOLERANCE = 0.0001
+    
+    sigma = 0.2  # Initial guess
+    
+    for _ in range(MAX_ITERATIONS):
+        call_price, put_price = black_scholes(S, K, T, r, sigma)
+        bs_price = call_price if option_type == "call" else put_price
+        
+        price_diff = bs_price - market_price
+        
+        if abs(price_diff) < TOLERANCE:
+            return sigma
+            
+        vega = black_scholes_vega(S, K, T, r, sigma)
+        
+        if vega == 0.0:
+            break
+            
+        sigma_new = sigma - price_diff / vega
+        
+        # Prevent negative volatility
+        if sigma_new <= 0.0:
+            sigma_new = 1e-5
+            
+        sigma = sigma_new
+
+    # Fallback to Brent's method if Newton-Raphson fails
+    def target_function(v):
+        c, p = black_scholes(S, K, T, r, v)
+        bs_p = c if option_type == "call" else p
+        return bs_p - market_price
+
+    try:
+        sigma_brent = scipy.optimize.brentq(target_function, 0.001, 10.0)
+        return sigma_brent
+    except (ValueError, RuntimeError):
+        return None
 
 
 # ── Verification & Plotting ──────────────────────────────────────────────────
