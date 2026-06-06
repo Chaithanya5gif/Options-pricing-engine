@@ -259,6 +259,9 @@ python3 monte_carlo.py
 
 # Unit tests for Greeks
 python3 -m unittest test_greeks.py -v
+
+# LSTM Volatility Prediction and Black-Scholes pricing comparison
+python3 lstm_volatility_pricer.py
 ```
 
 ### Quick API example
