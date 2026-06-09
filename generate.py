@@ -49,7 +49,6 @@ def main():
     plt.tight_layout()
     plt.savefig("generated_surfaces.png")
     print("Saved generated surfaces to generated_surfaces.png")
-    plt.show()
 
 if __name__ == "__main__":
     main()

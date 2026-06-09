@@ -116,7 +116,6 @@ def main():
     plt.tight_layout()
     plt.savefig("interpolation_comparison.png")
     print("Saved comparison to interpolation_comparison.png")
-    plt.show()
 
 if __name__ == "__main__":
     main()
