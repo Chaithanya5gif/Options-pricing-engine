@@ -70,26 +70,90 @@ $$
 
 ---
 
-## 5. Master Results
+## 5. Master Results — Live SPY Options Test
 
-### Table 2: Head-to-Head Comparison of All 6 Methods
+**Test Set:** 200 SPY call options (live market data, June 2026), stratified across moneyness buckets. Ground truth = mid-price `(bid + ask) / 2`. Risk-free rate = 5.25%.
 
-| Method | MAE (Test Set) | RMSE | Speed (ms/opt) | Primary Use Case | Key Limitations |
-|--------|----------------|------|----------------|------------------|-----------------|
-| **Black-Scholes** | 0.0000 | 0.0000 | < 0.01 ms | Fast baseline pricing for European options | Assumes constant volatility; no American options |
-| **CRR Binomial Tree** | 0.0100 | 0.0125 | ~1.50 ms | Pricing American options with early exercise | Computational cost scales quadratically $O(N^2)$ |
-| **Monte Carlo (CV)** | 0.0152 | 0.0180 | ~0.25 ms | Exotic, path-dependent, and multi-asset payoffs | Inherently noisy; requires variance reduction |
-| **MLP Pricer** | 0.0450 | 0.0602 | ~0.05 ms | Ultra-fast batch pricing and risk approximations | "Black-box" nature; requires massive training data |
-| **LSTM-BS Hybrid** | 0.0305 | 0.0410 | ~1.20 ms | Time-series informed volatility forecasting | Difficult to tune; relies on feature engineering |
-| **VAE** | 0.0250 | 0.0355 | ~0.80 ms | IV surface generation and missing data imputation | Complex architecture; computationally intensive |
+| Bucket | Count | Moneyness Range |
+|---|---|---|
+| Deep ITM | 40 | K/S < 0.90 |
+| ITM | 41 | 0.90 ≤ K/S < 0.975 |
+| ATM | 40 | 0.975 ≤ K/S ≤ 1.025 |
+| OTM | 40 | 1.025 < K/S ≤ 1.10 |
+| Deep OTM | 39 | K/S > 1.10 |
+
+### Table 2: Head-to-Head Comparison — All 6 Methods (n = 200 SPY options)
+
+| Method | MAE (all) | RMSE | % within 5% | MAE ATM | MAE OTM | Speed ms/opt | Best Use Case |
+|---|---|---|---|---|---|---|---|
+| **Black-Scholes** | 0.9058 | 1.4442 | 49.0% | 0.3790 | **0.0193** | **0.01** | Fast European baseline |
+| **CRR Binomial N=200** | 0.9053 | **1.4431** | 47.5% | 0.3793 | 0.0198 | 13.55 | American / early-exercise |
+| **Monte Carlo 100k** | **0.9038** | 1.4459 | **50.5%** | 0.3808 | 0.0199 | 1.23 | Exotic / path-dependent |
+| **LSTM-BS Hybrid** | 1.0477 | 1.4902 | 41.0% | 1.2547 | 0.0413 | **0.01** | Time-series vol forecasting |
+| **MLP Pricer** | 6.6577 | 7.3106 | 12.5% | 10.9255 | 5.1214 | 0.49 | Ultra-fast batch (in-distribution) |
+| **VAE-IV → BS** | 2.4755 | 3.1479 | 25.5% | 4.2988 | 0.9144 | 0.03 | IV surface interpolation |
+
+*Bold = winner in that column. Speed measured per-option on Apple M-series (MPS).*
+
+### Table 3: Bucket Winners
+
+| Moneyness Bucket | Winning Method | Runner-Up |
+|---|---|---|
+| Deep ITM | CRR Binomial N=200 | Black-Scholes |
+| ITM | LSTM-BS Hybrid | Black-Scholes |
+| ATM | Black-Scholes | CRR Binomial |
+| OTM | Black-Scholes | CRR Binomial |
+| Deep OTM | Black-Scholes | CRR Binomial |
 
 ---
 
 ## 6. Key Findings & Conclusion
 
-*(placeholder — expand before submission)*
+### 6.1 Classic Methods Are Essentially Equivalent on European Options
 
-Classic methods like Black-Scholes and CRR Binomial Trees remain fundamental due to their interpretability and exactness under theoretical assumptions. However, deep learning models provide significant empirical advantages. The MLP demonstrates that neural networks can approximate complex pricing functions with extreme speed, while the LSTM-BS model shows that hybrid approaches (combining analytical formulas with deep learning forecasts) provide robust, arbitrage-free pricing. Furthermore, generative models like the VAE prove invaluable for market-making and risk management by flawlessly reconstructing incomplete implied volatility surfaces. 
+When fed market-implied volatility as input, Black-Scholes, CRR (N=200), and Monte Carlo produce nearly identical prices (MAE within 0.003 of each other). This is expected: CRR converges to Black-Scholes as N→∞, and Monte Carlo converges in expectation. The real differentiator is **speed and applicability**:
+
+- **Black-Scholes**: 0.01 ms/option — instantaneous analytical solution. The clear winner for large-scale European option pricing.
+- **CRR Binomial (N=200)**: 13.55 ms/option — ~1,350× slower than BS, justified only for American options with early-exercise premiums.
+- **Monte Carlo (100k paths)**: 1.23 ms/option — wins on % within 5% (50.5%) due to variance averaging, but cannot justify its cost for vanilla European pricing. Its value lies in exotic/path-dependent payoffs that BS and CRR cannot price.
+
+### 6.2 LSTM-BS Hybrid — Right Idea, Single-Vol Limitation
+
+The LSTM correctly predicted a realized volatility of 12.4% for SPY, but this single sigma value cannot capture the **volatility smile**. ATM MAE spiked to 1.25 (vs BS's 0.38) because ATM options are most sensitive to the exact IV used. OTM options fared better (MAE 0.04) since their small absolute prices reduce error sensitivity. The hybrid architecture is sound — it would excel in contexts where the smile is flat or a vol-of-vol model feeds per-strike predictions rather than a scalar forecast.
+
+### 6.3 MLP Pricer — Severe Out-of-Distribution Degradation
+
+The MLP was trained on synthetic data with spot prices S ∈ [50, 150]. SPY trades at ~$737. Despite applying the linear homogeneity scaling trick (S→100, K→K/scale\_factor), the model produced an overall MAE of $6.66 and near-zero accuracy at ATM (MAE $10.93). This illustrates the **brittleness of purely data-driven pricers**: without test-domain coverage in training, they fail silently. The MLP's strength — sub-millisecond batch throughput — is only realizable when prices remain in-distribution, making it ideal for internal risk-system applications where the input space is tightly controlled.
+
+### 6.4 VAE-IV → BS — Smoothing Costs Accuracy
+
+The VAE successfully reconstructed a smooth IV surface (range: 0.205–0.364), but introducing a reconstruction step adds a *smoothing error* on top of the raw market IV. The VAE MAE of $2.48 is 2.7× worse than BS fed raw market IV. This is **not a failure** — it reveals the correct use case: VAE-IV is a **data-imputation tool** for illiquid strikes and missing surface points, not a direct pricing oracle. In markets where some expiries have no quote (e.g., mid-curve vol), VAE interpolation provides arbitrage-consistent fill-in IVs that raw interpolation cannot guarantee.
+
+### 6.5 Summary
+
+No single method dominates all use cases. The optimal choice depends on contract type, computational budget, and data availability:
+
+| Situation | Recommended Method |
+|---|---|
+| High-frequency European option pricing | Black-Scholes |
+| American options with early exercise | CRR Binomial Tree |
+| Exotic / barrier / Asian payoffs | Monte Carlo |
+| Vol-aware pricing with time-series dynamics | LSTM-BS (with per-strike LSTM) |
+| Ultra-fast in-distribution batch inference | MLP Pricer |
+| Illiquid strike IV interpolation / surface generation | VAE-IV |
+
+The most important finding for practitioners: **classic methods remain competitive when supplied with market-implied volatilities**, while deep learning methods offer genuine advantages only in specific structural roles — not as general-purpose drop-in replacements.
+
+---
+
+## 7. Limitations & Future Work
+
+- The LSTM predicts a single scalar volatility; a per-strike LSTM or a neural SVI (Stochastic Volatility Inspired) model would better capture the smile.
+- The MLP training domain must be matched to the deployment domain; future work should train on actual ETF price ranges or use log-moneyness as the input feature.
+- The VAE was trained on 500 synthetic + real surfaces; larger real-data training sets would improve reconstruction fidelity.
+- All deep learning methods were evaluated on call options only; put pricing and put-call parity violations warrant separate analysis.
+
+---
 
 ## References
 
@@ -98,3 +162,4 @@ Classic methods like Black-Scholes and CRR Binomial Trees remain fundamental due
 - Boyle, P. (1977). Options: A Monte Carlo Approach. *Journal of Financial Economics*, 4(3), 323–338.
 - Kingma, D. P., & Welling, M. (2013). Auto-Encoding Variational Bayes. *arXiv preprint arXiv:1312.6114*.
 - Glasserman, P. (2004). *Monte Carlo Methods in Financial Engineering*. Springer.
+- Hochreiter, S. & Schmidhuber, J. (1997). Long Short-Term Memory. *Neural Computation*, 9(8), 1735–1780.

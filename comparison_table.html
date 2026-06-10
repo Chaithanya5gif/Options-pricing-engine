@@ -1,0 +1,79 @@
+<!DOCTYPE html><html><head>
+<style>
+body { background:#0d1117; color:#e6edf3; font-family:Inter,sans-serif; padding:40px; }
+table { border-collapse:collapse; width:100%; }
+th { background:#21262d; padding:10px 14px; text-align:center; border:1px solid #30363d; }
+td { padding:8px 14px; text-align:center; border:1px solid #30363d; }
+tr:nth-child(even) { background:#1c2128; }
+</style></head><body>
+<h2>Options Pricing Engine — Method Comparison (SPY Live Data)</h2>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Method</th>
+      <th>MAE (all)</th>
+      <th>RMSE</th>
+      <th>% within 5%</th>
+      <th>MAE ATM</th>
+      <th>MAE OTM</th>
+      <th>Speed ms/opt</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Black-Scholes</td>
+      <td>0.9058</td>
+      <td>1.4442</td>
+      <td>49.0000</td>
+      <td>0.3790</td>
+      <td>0.0193</td>
+      <td>0.0096</td>
+    </tr>
+    <tr>
+      <td>CRR Binomial N=200</td>
+      <td>0.9053</td>
+      <td>1.4431</td>
+      <td>47.5000</td>
+      <td>0.3793</td>
+      <td>0.0198</td>
+      <td>13.5539</td>
+    </tr>
+    <tr>
+      <td>Monte Carlo 100k</td>
+      <td>0.9038</td>
+      <td>1.4459</td>
+      <td>50.5000</td>
+      <td>0.3808</td>
+      <td>0.0199</td>
+      <td>1.2256</td>
+    </tr>
+    <tr>
+      <td>LSTM-BS Hybrid</td>
+      <td>1.0477</td>
+      <td>1.4902</td>
+      <td>41.0000</td>
+      <td>1.2547</td>
+      <td>0.0413</td>
+      <td>0.0094</td>
+    </tr>
+    <tr>
+      <td>MLP Pricer</td>
+      <td>6.6577</td>
+      <td>7.3106</td>
+      <td>12.5000</td>
+      <td>10.9255</td>
+      <td>5.1214</td>
+      <td>0.4861</td>
+    </tr>
+    <tr>
+      <td>VAE-IV → BS</td>
+      <td>2.4755</td>
+      <td>3.1479</td>
+      <td>25.5000</td>
+      <td>4.2988</td>
+      <td>0.9144</td>
+      <td>0.0347</td>
+    </tr>
+  </tbody>
+</table>
+</body></html>
