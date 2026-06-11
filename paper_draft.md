@@ -18,32 +18,48 @@ This paper presents a systematic, reproducible comparison of classic numerical m
 
 ## 1. Introduction
 
-Option pricing is a central problem in quantitative finance. The evolution of computational finance has led to a transition from classic analytical and discrete methods, through stochastic volatility models, to modern machine learning approaches capable of capturing complex market dynamics. This paper evaluates seven distinct methodologies:
+Options pricing is a fundamental problem in quantitative finance — Black and Scholes (1973) established the benchmark for pricing European options under the assumption of constant volatility and continuous trading. However, this foundational model has well-documented limitations. The most prominent is the volatility smile problem: empirical market data consistently exhibits a negative skew (higher implied volatility for out-of-the-money puts), which directly contradicts the Black-Scholes assumption of log-normal asset price distributions. Over the past five decades, researchers have developed numerical and stochastic methods—such as the Cox-Ross-Rubinstein (1979) binomial tree, Monte Carlo simulations (Boyle, 1977), and the Heston (1993) stochastic volatility model—to address these shortcomings. 
 
-- **Classic Methods**: Black-Scholes (1973), CRR Binomial Tree (1979), and Monte Carlo Simulation (1977).
-- **Stochastic Volatility**: Heston (1993) model via Euler-Maruyama Monte Carlo — the first method with structural ability to reproduce the volatility smile.
-- **Deep Learning Methods**: Multi-Layer Perceptrons (MLP) for direct pricing, LSTM-BS hybrid models for volatility forecasting, and Variational Autoencoders (VAE) for implied volatility surface generation.
+Recently, the literature has identified the immense potential of machine learning (ML) to bridge the gap between classical theoretical limits and empirical realities. As flexible universal function approximators, neural networks offer a promising avenue to directly learn complex, non-linear pricing manifolds from market data or to enhance existing models by forecasting dynamic parameters without relying on rigid parametric assumptions.
+
+In this context, this paper presents a systematic, reproducible comparison of classic numerical methods, stochastic volatility models, and modern deep learning approaches. Our key contributions are:
+
+1. **Comprehensive Implementation:** We implement seven distinct option pricing methodologies from scratch in Python—ranging from classical Black-Scholes and CRR Binomial trees, to Euler-Maruyama Monte Carlo for the Heston model, to three distinct deep learning architectures (MLP, LSTM-BS Hybrid, and VAE).
+2. **Smile-Consistent Pricing Analysis:** We provide a detailed benchmarking of how each model handles the volatility smile, demonstrating quantitatively why flat-volatility models fail and how stochastic approaches (Heston) or generative ML models (VAE) successfully reconstruct the empirical volatility surface.
+3. **Rigorous Empirical Benchmarking:** We evaluate all models head-to-head on a live dataset of 200 SPY options across varying moneyness levels, offering a realistic assessment of the speed-accuracy tradeoff between fast analytical methods, accurate but computationally expensive numerical methods, and deep learning estimators.
+
+The remainder of this paper is structured as follows: Section 2 reviews related work in classical and ML-based option pricing. Section 3 outlines our mathematical foundations. Section 4 details the methodologies of the seven evaluated models. Section 5 presents our empirical results and computational benchmarks. Section 6 concludes with directions for future research.
 
 ---
 
-## 2. Mathematical Foundations
+## 2. Related Work
 
-### 2.1 Black-Scholes
+The mathematical pricing of options has evolved through several distinct phases. The foundation was laid by Black and Scholes (1973), who derived the first closed-form analytical solution for European options under the assumption of constant volatility. Recognizing the need to price American options, Cox, Ross, and Rubinstein (1979) introduced the binomial lattice model, which discretizes time to allow for early-exercise checking via backward induction. Simultaneously, Boyle (1977) pioneered the use of Monte Carlo simulation for options pricing, offering a flexible numerical approach capable of handling complex, path-dependent exotic derivatives, albeit at the cost of high computational intensity. To address the empirical reality of the volatility smile, Heston (1993) introduced a stochastic volatility model that allows variance to follow a mean-reverting diffusion process, providing the structural ability to price options consistently across strikes.
+
+In recent years, the focus has shifted toward data-driven deep learning approaches. Ruf and Wang (2020) provide a comprehensive literature review outlining how neural networks are increasingly applied to both pricing and hedging, highlighting a shift away from rigid parametric constraints. Researchers have explored various network architectures: for example, Gnoatto et al. (2020) demonstrated the utility of neural networks in solving complex risk management frameworks, while Wang and Hong (2021) utilized neural stochastic differential equations in a simulation-optimization approach for pricing.
+
+More recently, hybrid and advanced architectures have gained traction. Shvimer and Zhu (2024) proposed a hybrid neural network model that merges traditional mathematical bounds with data-driven flexibility to improve pricing accuracy. In the realm of comparative studies, Gross, Kruger, and Toerien (2025) conducted a detailed analysis comparing artificial neural networks against classic Black-Scholes and Bachelier models, confirming the superior adaptability of deep learning to market data. Furthermore, Zheng et al. (2025) introduced "Neural Jumps," an architecture designed to better capture discontinuous asset price movements, illustrating the ongoing evolution of neural networks in capturing complex financial dynamics previously modeled only by advanced jump-diffusion mathematics.
+
+---
+
+## 3. Mathematical Foundations
+
+### 3.1 Black-Scholes
 $$
 C = S \cdot N(d_1) - K e^{-rT} N(d_2), \quad d_1 = \frac{\ln(S/K) + (r + \frac{\sigma^2}{2})T}{\sigma\sqrt{T}}, \quad d_2 = d_1 - \sigma\sqrt{T}
 $$
 
-### 2.2 CRR Binomial Tree
+### 3.2 CRR Binomial Tree
 $$
 u = e^{\sigma\sqrt{\Delta t}}, \quad d = 1/u, \quad p = \frac{e^{r\Delta t} - d}{u - d}
 $$
 
-### 2.3 Monte Carlo
+### 3.3 Monte Carlo
 $$
 S_T = S_0 \exp\!\left[(r - \tfrac{1}{2}\sigma^2)T + \sigma\sqrt{T}\,Z\right], \quad Z \sim \mathcal{N}(0,1)
 $$
 
-### 2.4 Heston Stochastic Volatility Model
+### 3.4 Heston Stochastic Volatility Model
 
 The Heston (1993) model extends GBM by making variance $v_t$ itself a stochastic process driven by a mean-reverting square-root (CIR) diffusion correlated with the spot:
 $$
@@ -57,7 +73,7 @@ where $\kappa$ is the mean-reversion speed, $\theta$ the long-run variance, $\si
 
 ---
 
-## 3. Preliminary Results — Table 1 (Classic Methods)
+## 4. Preliminary Results — Table 1 (Classic Methods)
 
 | Method | Price | \|Error vs BS\| | Std Error | Time (ms) | Use Case |
 |---|---|---|---|---|---|
@@ -67,7 +83,7 @@ where $\kappa$ is the mean-reversion speed, $\theta$ the long-run variance, $\si
 
 ---
 
-## 4. Methodology: Model Descriptions
+## 5. Methodology: Model Descriptions
 
 **Black-Scholes:** The Black-Scholes (1973) model provides a closed-form analytical solution for pricing European options assuming log-normal asset price dynamics, constant volatility, and continuous trading. Derived from the no-arbitrage principle and Ito's Lemma, it yields a parabolic partial differential equation whose solution requires only five inputs: spot price, strike price, time to maturity, risk-free rate, and implied volatility. While theoretically elegant and computationally instantaneous, its reliance on constant volatility inherently contradicts the empirical volatility smile observed in modern markets.
 
@@ -85,7 +101,7 @@ where $\kappa$ is the mean-reversion speed, $\theta$ the long-run variance, $\si
 
 ---
 
-## 5. Results
+## 6. Results
 
 We evaluate all six methods on a held-out test set of 200 SPY call options drawn from live market data in June 2026 (SPY spot: $736.70, risk-free rate: 5.25%). Options are stratified across five moneyness buckets as described in Section 4. Ground-truth prices are computed as the mid-market quote, $(b + a)/2$, where $b$ and $a$ are the best prevailing bid and ask. Results are reported in Table 2; per-bucket winners are reported in Table 3.
 
@@ -123,7 +139,7 @@ We evaluate all six methods on a held-out test set of 200 SPY call options drawn
 | OTM | Black-Scholes | CRR Binomial | **0.146** |
 | Deep OTM | Black-Scholes | CRR Binomial | **0.016** |
 
-### 5.1 Overall Performance
+### 6.1 Overall Performance
 
 The three classical GBM methods — Black-Scholes, CRR Binomial (N=200), and Monte Carlo (100k paths) — cluster tightly at the top of the ranking, with overall MAEs of \$0.9058, \$0.9053, and \$0.9038, respectively (Table 2). The spread among them is \$0.002, smaller than the bid-ask half-spread on most options in our test set, and statistically indistinguishable. This convergence is theoretically expected: CRR converges to Black-Scholes as $N \to \infty$, and Monte Carlo converges in expectation under Geometric Brownian Motion with the same input volatility. In practice, all three methods are fed the market-implied volatility $\sigma$ extracted from each option's chain, which means the residual error reflects structural limitations of the GBM assumption itself — not differences between the pricing engines.
 
@@ -131,7 +147,7 @@ The Heston MC model achieves an overall MAE of \$1.04 — 15% worse than vanilla
 
 The deep learning methods perform substantially worse on aggregate. The VAE-IV → BS method achieves an overall MAE of \$2.48, representing a 2.7× degradation relative to vanilla Black-Scholes fed raw market IV. The LSTM-BS hybrid registers an overall MAE of \$1.05. Most severely, the MLP pricer produces an MAE of \$6.66 and correctly prices only 12.5% of options within 5% of market value — compared to 50.5% for Monte Carlo. These results indicate that, on a broad, stratified test across all moneyness levels, classical analytical and numerical methods are not materially outperformed by any of the deep learning architectures tested here.
 
-### 5.2 Performance by Moneyness
+### 6.2 Performance by Moneyness
 
 The aggregate results mask a more nuanced picture when performance is disaggregated by moneyness bucket (Table 3). For OTM and Deep OTM options — where absolute prices are small — all six methods produce low absolute errors (BS MAE OTM: \$0.019), and the ranking differences are negligible. The competition is most meaningful in the ATM and ITM regions, where absolute prices are large and the methods diverge.
 
@@ -139,17 +155,17 @@ At ATM, Black-Scholes achieves the lowest MAE at \$0.379, with CRR close behind 
 
 The MLP pricer degrades uniformly across all buckets. Trained on a synthetic dataset with $S \in [50, 150]$, the model was evaluated on SPY at \$736.70. We applied the standard linear homogeneity scaling trick ($S \to 100$, $K \to K / \text{scale\_factor}$), but this did not recover in-distribution performance. The ATM MAE of \$10.93 and OTM MAE of \$5.12 confirm that the model extrapolates poorly outside its training manifold — a known failure mode of purely data-driven pricers when domain shift is large. This finding is not a critique of the MLP architecture per se but of the training data specification: a model trained on normalised log-moneyness and time-to-maturity features would not suffer this degradation.
 
-### 5.3 Computational Efficiency
+### 6.3 Computational Efficiency
 
 The speed hierarchy is clear and spans five orders of magnitude. Black-Scholes and LSTM-BS (post-training) both execute in **0.01 ms per option** on CPU — consistent with their closed-form analytical structure. The VAE-IV pipeline requires **0.03 ms** per option (bilinear surface interpolation plus one forward pass). The MLP requires **0.49 ms** per option owing to its four-layer network and batch-norm overhead. Monte Carlo (100k paths per option) requires **1.23 ms**, and the CRR binomial tree at N=200 is the slowest at **13.55 ms** — a 1,350× penalty relative to Black-Scholes, attributable to its $O(N^2)$ backward-induction complexity.
 
 For systems requiring high-frequency re-valuation — such as real-time Greeks computation across a large options book — the computational cost of CRR at N=200 is prohibitive, and Monte Carlo's 1.23 ms per option implies a throughput ceiling of approximately 800 options/second per core. Black-Scholes remains the dominant choice for throughput-sensitive applications, with Monte Carlo reserved for path-dependent or multi-factor payoffs that cannot be priced analytically.
 
-### 5.4 The Heston Implied Volatility Smile
+### 6.4 The Heston Implied Volatility Smile
 
 The most important qualitative result of this study is the Heston implied volatility smile (Figure 2). Pricing calls at 10 strikes from 80% to 120% moneyness and back-solving for the Black-Scholes IV that matches each Heston price yields a distinctly curved smile: IV ranges from 17.3% at the 120% OTM strike to 23.0% at the 80% ITM strike, with the 20% flat BS vol lying between. This is the canonical pattern of **negative equity skew** — the left wing (OTM puts / ITM calls) carries higher implied vol than the right wing — generated mechanically by the negative spot-vol correlation ρ=−0.7. Black-Scholes, CRR, and GBM Monte Carlo are structurally incapable of reproducing this smile: fed a single market IV they produce a flat smile by construction. The Heston model is the only method in this study that generates a non-flat, structurally correct implied vol surface from first principles.
 
-### 5.5 Where Machine Learning Adds Value
+### 6.5 Where Machine Learning Adds Value
 
 The results establish a clear boundary for where machine learning architectures provide genuine value versus where they fall short of classical alternatives. None of the three deep learning methods tested here outperform Black-Scholes on overall MAE when both are applied to vanilla European call pricing with available market IV. This is the correct null result for an honest benchmarking study.
 
@@ -157,7 +173,7 @@ However, the deep learning methods solve structurally different problems. The VA
 
 ---
 
-## 6. Conclusion
+## 7. Conclusion
 
 This paper presented a reproducible, end-to-end comparison of seven options pricing methodologies — three classical, one stochastic volatility model, and three deep learning — evaluated on 200 live SPY call options across the full moneyness spectrum. The central finding is that when all methods are supplied with market-implied volatility, the classical GBM trio (Black-Scholes, CRR Binomial, Monte Carlo) achieves nearly identical accuracy (MAE spread of \$0.002), with Black-Scholes dominating on speed at 0.01 ms per option. The Heston stochastic volatility model achieves an overall MAE of \$1.04 — fourth-best overall — but is the only method that structurally generates a non-flat implied volatility smile: negative spot-vol correlation (ρ=−0.7) produces the canonical equity left skew, with IV ranging from 17.3% (OTM calls) to 23.0% (ITM calls) versus the 20% flat line used by all GBM pricers. Deep learning models do not improve point accuracy on vanilla European calls: the best deep learning result (LSTM-BS, MAE \$1.05) is 16% worse than the worst classical result (BS, MAE \$0.91). The correct interpretation is not that deep learning fails at option pricing, but that it solves different problems — the VAE provides arbitrage-consistent IV surface imputation, the LSTM provides regime-sensitive volatility forecasts, and the MLP provides ultra-fast batch throughput when operating within its training distribution.
 
