@@ -262,7 +262,18 @@ python3 -m unittest test_greeks.py -v
 
 # LSTM Volatility Prediction and Black-Scholes pricing comparison
 python3 lstm_volatility_pricer.py
+
+# Run the interactive Streamlit Dashboard (Prices, Greeks, Vol Smile, Model Comparison)
+streamlit run app.py
 ```
+
+### ☁️ Streamlit Cloud Deployment
+
+Want to share this dashboard publicly? You can deploy it for **free** on Streamlit Cloud:
+1. Push this repository to GitHub.
+2. Go to [share.streamlit.io](https://share.streamlit.io/) and connect your GitHub account.
+3. Select this repository and set the main file path to `app.py`.
+4. Click **Deploy!** You'll get a public URL like `https://yourapp.streamlit.app` that you can add to your README, Twitter bio, or portfolio.
 
 ### Quick API example
 
