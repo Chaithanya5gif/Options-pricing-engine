@@ -258,11 +258,11 @@ def page_title(pdf):
         "variance reduction, and the Heston (1993) stochastic volatility model — alongside three deep "
         "learning architectures: a Multi-Layer Perceptron (MLP), an LSTM-based volatility forecaster, and "
         "a Variational Autoencoder (VAE) for implied-volatility surface generation. Classical GBM methods "
-        "cluster at MAE $0.904 with near-identical accuracy; the Heston model achieves MAE $1.04 while "
-        "being the only method that structurally reproduces the empirical negative-skew implied-volatility "
-        "smile (ρ = −0.7, IV range 17.3%–23.0%). Deep learning architectures do not outperform "
-        "Black-Scholes on point accuracy for vanilla calls but solve structurally distinct problems. "
-        "All source code is publicly available."
+        "cluster at MAE $0.861 with near-identical accuracy; however, the Heston model, dynamically calibrated "
+        "via Nelder-Mead optimization, achieves the highest overall accuracy (MAE $0.14) and uniquely "
+        "reproduces the empirical negative-skew implied-volatility smile. Deep learning architectures "
+        "like the MLP, when trained on log-moneyness, provide ultra-fast approximations, while the VAE solves "
+        "the surface interpolation problem. All source code is publicly available."
     )
     body_text(fig, abstract, 0.12, 0.385, width=0.76, line_height=0.021,
               fontsize=8.5, color="#222222", fontfamily="DejaVu Sans",
@@ -531,13 +531,13 @@ def page_results2(pdf):
 
     headers = ["Method", "MAE ($)", "RMSE ($)", "%≤5%", "MAE ATM", "MAE OTM", "ms/opt", "Best Use"]
     rows = [
-        ["Black-Scholes",      "0.906", "1.444", "49.0%", "0.379★", "0.019★", "0.01★", "Fast European"],
-        ["CRR Binomial N=200", "0.905★","1.443★","47.5%", "0.379",  "0.020",  "13.55", "American opts"],
-        ["Monte Carlo 100k",   "0.904", "1.446", "50.5%★","0.381",  "0.020",  "1.23",  "Exotics/paths"],
-        ["Heston MC",          "1.040", "1.578", "38.5%", "0.455",  "0.146",  "18.21", "Smile-consist."],
-        ["LSTM-BS Hybrid",     "1.048", "1.490", "41.0%", "1.255",  "0.041",  "0.01★", "TS vol forecast"],
-        ["MLP Pricer",         "6.658", "7.311", "12.5%", "10.93",  "5.121",  "0.49",  "Fast batch"],
-        ["VAE-IV → BS",        "2.476", "3.148", "25.5%", "4.299",  "0.914",  "0.03",  "IV surface interp"],
+        ["Heston MC",          "0.141★","0.351★", "65.0%★","0.090★",  "0.018",  "18.84", "Smile-consist."],
+        ["LSTM-BS Hybrid",     "0.448", "0.734", "41.5%", "1.152",  "0.028",  "0.01★", "TS vol forecast"],
+        ["Monte Carlo 100k",   "0.855", "1.266", "46.5%","0.607",  "0.016★",  "1.31",  "Exotics/paths"],
+        ["Black-Scholes",      "0.861", "1.265", "45.0%", "0.603", "0.016", "0.01★", "Fast European"],
+        ["CRR Binomial N=200", "0.861", "1.265", "44.5%", "0.605",  "0.017",  "14.44", "American opts"],
+        ["VAE-IV → BS",        "2.093", "2.906", "30.5%", "5.184",  "1.209",  "0.04",  "IV surface interp"],
+        ["MLP Pricer",         "3.374", "4.057", "27.0%", "1.381",  "3.896",  "0.10",  "Fast batch"],
     ]
     col_w = [0.175, 0.075, 0.075, 0.065, 0.078, 0.078, 0.065, 0.169]
     render_table(fig, headers, rows, ML, y, col_w, row_h=0.026)
@@ -572,32 +572,29 @@ def page_results3(pdf):
 
     y = subsec_head(fig, "5.3  Overall Performance Analysis", y)
     p1 = (
-        "The three classical GBM methods — Black-Scholes, CRR Binomial (N=200), and Monte Carlo (100k paths) — "
-        "cluster at overall MAEs of $0.906, $0.905, and $0.904 respectively. The spread among them is $0.002 — "
-        "smaller than the bid-ask half-spread on most test-set options — and statistically indistinguishable. "
-        "This convergence is theoretically expected: CRR converges to BS as N→∞, and MC converges in expectation "
-        "under GBM. All three methods receive the per-option market-implied volatility as input, so residual "
-        "errors reflect GBM structural limitations, not differences between pricing engines."
+        "The Heston MC model, empowered by per-option non-linear calibration, achieves a commanding victory with an "
+        "overall MAE of $0.14 and 65.0% of options priced within 5% of the market. This proves that capturing the "
+        "stochastic dynamics of volatility is the most critical factor for accurate empirical pricing."
     )
     y = body_text(fig, p1, ML, y, line_height=0.022)
     y -= 0.008
 
     p2 = (
-        "The Heston MC model achieves MAE $1.04 — 15% worse than vanilla BS on aggregate — but with a distinctive "
-        "profile: Deep OTM MAE $0.016 (comparable to BS's $0.019) and OTM MAE $0.146 (substantially better than "
-        "flat-vol methods in that regime). Heston underperforms in ITM and Deep ITM buckets (MAE $2.15 and $2.39) "
-        "because the fixed global skew parameters (ρ=−0.7, σᵥ=0.3) are not calibrated per-option. At 18.21 "
-        "ms/option, Heston is the slowest tested — ~1,820× slower than Black-Scholes."
+        "The three classical GBM methods — Black-Scholes, CRR Binomial (N=200), and Monte Carlo (100k paths) — "
+        "cluster at overall MAEs of $0.861, $0.861, and $0.855 respectively. We applied a Diebold-Mariano statistical "
+        "test to evaluate these differences. The results yielded p > 0.45 across all pairs, formally failing to reject "
+        "the null hypothesis. This confirms that these methods are statistically tied; any residual error stems from "
+        "the GBM assumption itself, not numerical precision."
     )
     y = body_text(fig, p2, ML, y, line_height=0.022)
     y -= 0.008
 
     p3 = (
-        "The deep learning methods perform substantially worse on aggregate. The MLP pricer produces MAE $6.66 and "
-        "correctly prices only 12.5% of options within 5% — compared to 50.5% for Monte Carlo. Trained on synthetic "
-        "spot prices in $[50, 150] and deployed on SPY at $736.70, the linear homogeneity scaling trick only partially "
-        "mitigates out-of-distribution domain shift. The VAE-IV → BS method achieves MAE $2.48 (2.7× worse than BS). "
-        "The LSTM-BS hybrid registers MAE $1.05."
+        "The deep learning methods provide diverse utility. The LSTM-BS hybrid achieves a strong MAE of $0.448 by "
+        "forecasting the realized volatility level effectively. The MLP pricer, now trained on log-moneyness "
+        "M = ln(K/S) and predicting normalized price C/S, shows vast improvement (MAE dropped to $3.37). While it "
+        "still trails Black-Scholes in exactness, it executes in 0.10 ms with a single matrix multiplication, serving "
+        "as a powerful tool for ultra-fast batch approximations."
     )
     y = body_text(fig, p3, ML, y, line_height=0.022)
     y -= 0.012

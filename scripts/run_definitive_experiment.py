@@ -375,19 +375,17 @@ def price_all(
     r_arr = df["r"].values
     sigma_arr = df["sigma"].values
 
-    scale_factors = S_arr / 100.0
-    S_scaled = np.full(n, 100.0)
-    K_scaled = K_arr / scale_factors
+    M_arr = np.log(K_arr / S_arr)
 
     mlp_inputs = torch.tensor(
-        np.stack([S_scaled, K_scaled, T_arr, r_arr, sigma_arr], axis=1),
+        np.stack([M_arr, T_arr, r_arr, sigma_arr], axis=1),
         dtype=torch.float32,
     ).to(device)
     t0_mlp = time.perf_counter()
     with torch.no_grad():
         mlp_raw = mlp(mlp_inputs).cpu().numpy().flatten()
     mlp_ms_each = (time.perf_counter() - t0_mlp) * 1000 / n
-    mlp_prices = mlp_raw * scale_factors
+    mlp_prices = mlp_raw * S_arr
 
     for idx, row in df.iterrows():
         S = row["S"]

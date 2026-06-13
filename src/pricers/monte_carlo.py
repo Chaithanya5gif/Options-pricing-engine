@@ -218,7 +218,138 @@ def mc_control_variate(
     }
 
 
-# ── 4. Comparison Table Builder ───────────────────────────────────────────────
+# ── 4. Exotic: Barrier Options ──────────────────────────────────────────────────
+
+
+def mc_barrier_option(
+    S0: float,
+    K: float,
+    T: float,
+    r: float,
+    sigma: float,
+    H: float,
+    barrier_type: str = "down-and-out",
+    option_type: str = "call",
+    n_paths: int = 100_000,
+    n_steps: int = 252,
+    seed: int = 42,
+) -> dict:
+    """Monte Carlo pricer for Barrier Options (e.g., Down-and-Out Call).
+
+    Path-dependent options require simulating the full path (Euler-Maruyama)
+    rather than just the terminal price. This highlights MC's structural
+    advantage over Black-Scholes.
+
+    Args:
+        S0 (float): Current stock price.
+        K (float): Strike price.
+        T (float): Time to expiry in years.
+        r (float): Risk-free interest rate.
+        sigma (float): Volatility.
+        H (float): Barrier level.
+        barrier_type (str): Type of barrier. Defaults to "down-and-out".
+        option_type (str): "call" or "put". Defaults to "call".
+        n_paths (int): Number of paths. Defaults to 100_000.
+        n_steps (int): Number of time steps. Defaults to 252.
+        seed (int): Random seed. Defaults to 42.
+
+    Returns:
+        dict: Pricing results.
+    """
+    rng = np.random.default_rng(seed)
+    t0 = time.perf_counter()
+
+    dt = T / n_steps
+    drift = (r - 0.5 * sigma**2) * dt
+    diff = sigma * math.sqrt(dt)
+
+    # Initialize paths
+    S = np.full(n_paths, S0, dtype=np.float64)
+    active = np.ones(n_paths, dtype=bool)
+
+    for _ in range(n_steps):
+        Z = rng.standard_normal(n_paths)
+        S = S * np.exp(drift + diff * Z)
+        
+        # Check barrier condition
+        if barrier_type == "down-and-out":
+            active &= (S > H)
+        elif barrier_type == "up-and-out":
+            active &= (S < H)
+        elif barrier_type == "down-and-in":
+            active |= (S <= H)
+        elif barrier_type == "up-and-in":
+            active |= (S >= H)
+
+    # Note: For "in" options, active starts as False and becomes True when barrier is breached.
+    # We initialize it to True above, so let's fix the logic for "in" options:
+    
+    # Correcting the implementation to handle "in" options properly:
+    # Actually, let's keep it simple and just re-do it properly inside the loop
+    pass
+
+def mc_barrier_option(
+    S0: float,
+    K: float,
+    T: float,
+    r: float,
+    sigma: float,
+    H: float,
+    barrier_type: str = "down-and-out",
+    option_type: str = "call",
+    n_paths: int = 100_000,
+    n_steps: int = 252,
+    seed: int = 42,
+) -> dict:
+    rng = np.random.default_rng(seed)
+    t0 = time.perf_counter()
+
+    dt = T / n_steps
+    drift = (r - 0.5 * sigma**2) * dt
+    diff = sigma * math.sqrt(dt)
+
+    S = np.full(n_paths, S0, dtype=np.float64)
+    
+    if barrier_type.endswith("out"):
+        active = np.ones(n_paths, dtype=bool)
+    else:
+        active = np.zeros(n_paths, dtype=bool)
+
+    for _ in range(n_steps):
+        Z = rng.standard_normal(n_paths)
+        S = S * np.exp(drift + diff * Z)
+        
+        if barrier_type == "down-and-out":
+            active &= (S > H)
+        elif barrier_type == "up-and-out":
+            active &= (S < H)
+        elif barrier_type == "down-and-in":
+            active |= (S <= H)
+        elif barrier_type == "up-and-in":
+            active |= (S >= H)
+
+    if option_type == "call":
+        payoffs = np.maximum(S - K, 0.0)
+    else:
+        payoffs = np.maximum(K - S, 0.0)
+
+    # Apply active mask
+    payoffs = payoffs * active
+
+    disc = math.exp(-r * T)
+    price = disc * payoffs.mean()
+    se = disc * payoffs.std(ddof=1) / math.sqrt(n_paths)
+
+    return {
+        "price": price,
+        "std_error": se,
+        "n_paths": n_paths,
+        "elapsed_ms": (time.perf_counter() - t0) * 1000,
+        "method": f"MC Barrier ({barrier_type})",
+    }
+
+
+# ── 5. Comparison Table Builder ───────────────────────────────────────────────
 
 
 def build_comparison_table(

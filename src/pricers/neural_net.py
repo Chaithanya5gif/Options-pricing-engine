@@ -34,7 +34,16 @@ def generate_synthetic_data(num_samples=100000):
         call_prices[i] = c
 
     df = pd.DataFrame(
-        {"S": S, "K": K, "T": T, "r": r, "sigma": sigma, "call_price": call_prices}
+        {
+            "S": S,
+            "K": K,
+            "T": T,
+            "r": r,
+            "sigma": sigma,
+            "call_price": call_prices,
+            "M": np.log(K / S),
+            "norm_price": call_prices / S,
+        }
     )
     return df
 
@@ -46,7 +55,7 @@ class MLPPricer(nn.Module):
     def __init__(self):
         super(MLPPricer, self).__init__()
         self.net = nn.Sequential(
-            nn.Linear(5, 256),
+            nn.Linear(4, 256),
             nn.BatchNorm1d(256),
             nn.ReLU(),
             nn.Linear(256, 128),
@@ -72,13 +81,15 @@ def train_model(df):
     Returns:
         tuple: A tuple containing the trained model, test dataloader, and device used.
     """
-    X = df[["S", "K", "T", "r", "sigma"]].values
-    y = df["call_price"].values.reshape(-1, 1)
+    X = df[["M", "T", "r", "sigma"]].values
+    y = df["norm_price"].values.reshape(-1, 1)
+    S_vals = df["S"].values.reshape(-1, 1)
 
     X_tensor = torch.tensor(X, dtype=torch.float32)
     y_tensor = torch.tensor(y, dtype=torch.float32)
+    S_tensor = torch.tensor(S_vals, dtype=torch.float32)
 
-    dataset = TensorDataset(X_tensor, y_tensor)
+    dataset = TensorDataset(X_tensor, y_tensor, S_tensor)
 
     train_size = int(0.8 * len(dataset))
     test_size = len(dataset) - train_size
@@ -105,7 +116,7 @@ def train_model(df):
     for epoch in range(epochs):
         model.train()
         train_loss = 0.0
-        for X_batch, y_batch in train_loader:
+        for X_batch, y_batch, _ in train_loader:
             X_batch, y_batch = X_batch.to(device), y_batch.to(device)
 
             optimizer.zero_grad()
@@ -122,7 +133,7 @@ def train_model(df):
         model.eval()
         val_loss = 0.0
         with torch.no_grad():
-            for X_batch, y_batch in test_loader:
+            for X_batch, y_batch, _ in test_loader:
                 X_batch, y_batch = X_batch.to(device), y_batch.to(device)
                 outputs = model(X_batch)
                 loss = criterion(outputs, y_batch)
@@ -169,11 +180,11 @@ def evaluate_model(model, test_loader, device):
     all_targets = []
 
     with torch.no_grad():
-        for X_batch, y_batch in test_loader:
+        for X_batch, y_batch, S_batch in test_loader:
             X_batch = X_batch.to(device)
             outputs = model(X_batch)
-            all_preds.append(outputs.cpu().numpy())
-            all_targets.append(y_batch.numpy())
+            all_preds.append((outputs.cpu() * S_batch).numpy())
+            all_targets.append((y_batch * S_batch).numpy())
 
     all_preds = np.vstack(all_preds)
     all_targets = np.vstack(all_targets)
@@ -211,9 +222,11 @@ def evaluate_model(model, test_loader, device):
         S, K, T, r, sigma = inp
         bs_c, _ = black_scholes(S, K, T, r, sigma)
 
-        inp_tensor = torch.tensor([inp], dtype=torch.float32).to(device)
+        M_val = np.log(K / S)
+        inp_tensor = torch.tensor([[M_val, T, r, sigma]], dtype=torch.float32).to(device)
         with torch.no_grad():
-            mlp_c = model(inp_tensor).item()
+            mlp_norm_c = model(inp_tensor).item()
+            mlp_c = mlp_norm_c * S
 
         print(
             f"{name:15s} -> BS: {bs_c:8.4f} | MLP: {mlp_c:8.4f} | Diff: {mlp_c - bs_c:8.4f}"
@@ -273,20 +286,14 @@ def test_real_market(model, device, ticker="SPY"):
             # BS Price
             bs_c, _ = black_scholes(S, K, T, r, sigma)
 
-            # MLP Price
-            # The MLP was trained on S, K in [50, 150].
-            # SPY is around ~700+, which is OOD. We use linear homogeneity: C(S, K) = k * C(S/k, K/k)
-            # Let's scale S to 100.
-            scale_factor = S / 100.0
-            S_scaled = 100.0
-            K_scaled = K / scale_factor
-
+            # Predict C/S using M = ln(K/S), T, r, sigma
+            M_val = np.log(K / S)
             inp_tensor = torch.tensor(
-                [[S_scaled, K_scaled, T, r, sigma]], dtype=torch.float32
+                [[M_val, T, r, sigma]], dtype=torch.float32
             ).to(device)
             with torch.no_grad():
-                mlp_c_scaled = model(inp_tensor).item()
-            mlp_c = mlp_c_scaled * scale_factor
+                mlp_norm_c = model(inp_tensor).item()
+            mlp_c = mlp_norm_c * S
 
             results.append(
                 {

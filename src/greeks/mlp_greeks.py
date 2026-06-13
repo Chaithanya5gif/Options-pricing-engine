@@ -31,13 +31,15 @@ def compute_neural_greeks(model, S, K, T, r, sigma, device):
         [sigma], dtype=torch.float32, requires_grad=True, device=device
     )
 
-    # Concatenate inputs. S and sigma require grads.
+    # Inputs: M = ln(K/S)
+    M_tensor = torch.log(K_tensor / S_tensor)
     inputs = torch.cat(
-        [S_tensor, K_tensor, T_tensor, r_tensor, sigma_tensor]
+        [M_tensor, T_tensor, r_tensor, sigma_tensor]
     ).unsqueeze(0)
 
-    # Forward pass
-    price = model(inputs)
+    # Forward pass: price = S * MLP(M, T, r, sigma)
+    norm_price = model(inputs)
+    price = S_tensor * norm_price
 
     # Compute gradients w.r.t S (Delta) and sigma (Vega)
     # create_graph=True allows higher order derivatives if needed, but we just need first order
