@@ -1,13 +1,17 @@
 # Options Pricing Engine 📈
 
-> A comprehensive evaluation of classic quantitative finance models and modern deep learning approaches for options pricing.
+> A systematic, reproducible comparison of seven options pricing methodologies — from Black-Scholes to deep learning — benchmarked on 200 live SPY options.
 
 ![Python](https://img.shields.io/badge/python-3.14%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Tests](https://img.shields.io/badge/tests-passing-brightgreen)
+![Paper](https://img.shields.io/badge/paper-SSRN%20submission%20ready-orange)
 
 **Live demo:** [Streamlit Dashboard](http://localhost:8501)  
-**Paper:** [SSRN link — coming Day 20]
+**Paper PDF:** [`options-pricing-ml-Chaithanya-2026.pdf`](./options-pricing-ml-Chaithanya-2026.pdf)  
+**Paper draft (Markdown):** [`paper_draft.md`](./paper_draft.md)  
+**SSRN:** *Submission pending — link will appear here*  
+**LaTeX source:** [`options-pricing-ml-Chaithanya-2026.tex`](./options-pricing-ml-Chaithanya-2026.tex)
 
 ![Streamlit Dashboard](greeks_dashboard.png)
 

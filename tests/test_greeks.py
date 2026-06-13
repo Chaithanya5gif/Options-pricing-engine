@@ -1,13 +1,14 @@
 import unittest
 import math
-from black_scholes import (
+from src.greeks.greeks import (
     black_scholes_delta,
     black_scholes_gamma,
     black_scholes_vega,
     black_scholes_theta,
     black_scholes_rho,
-    implied_vol
 )
+from src.pricers.bs import implied_vol
+
 
 class TestOptionGreeks(unittest.TestCase):
     def setUp(self):
@@ -19,17 +20,23 @@ class TestOptionGreeks(unittest.TestCase):
 
     def test_delta_bounds_and_atm(self):
         # 1. Delta: ATM Delta should be around 0.5 for Call, -0.5 for Put (allowing continuous r drift)
-        c_delta_atm, p_delta_atm = black_scholes_delta(100, self.K, self.T, self.r, self.sigma)
+        c_delta_atm, p_delta_atm = black_scholes_delta(
+            100, self.K, self.T, self.r, self.sigma
+        )
         self.assertTrue(0.5 < c_delta_atm < 0.7)
         self.assertTrue(-0.5 < p_delta_atm < -0.3)
         self.assertTrue(math.isclose(c_delta_atm - p_delta_atm, 1.0))
 
         # 2. Deep ITM/OTM Delta
-        c_delta_itm, p_delta_itm = black_scholes_delta(200, self.K, self.T, self.r, self.sigma)
+        c_delta_itm, p_delta_itm = black_scholes_delta(
+            200, self.K, self.T, self.r, self.sigma
+        )
         self.assertTrue(math.isclose(c_delta_itm, 1.0, abs_tol=1e-4))
         self.assertTrue(math.isclose(p_delta_itm, 0.0, abs_tol=1e-4))
 
-        c_delta_otm, p_delta_otm = black_scholes_delta(20, self.K, self.T, self.r, self.sigma)
+        c_delta_otm, p_delta_otm = black_scholes_delta(
+            20, self.K, self.T, self.r, self.sigma
+        )
         self.assertTrue(math.isclose(c_delta_otm, 0.0, abs_tol=1e-4))
         self.assertTrue(math.isclose(p_delta_otm, -1.0, abs_tol=1e-4))
 
