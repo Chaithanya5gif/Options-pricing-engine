@@ -1,79 +1,128 @@
 # Options Pricing Engine 📈
 
-> A systematic, reproducible comparison of seven options pricing methodologies — from Black-Scholes to deep learning — benchmarked on 200 live SPY options.
 
-![Python](https://img.shields.io/badge/python-3.14%2B-blue)
-![License](https://img.shields.io/badge/license-MIT-green)
-![Tests](https://img.shields.io/badge/tests-passing-brightgreen)
-![Paper](https://img.shields.io/badge/paper-SSRN%20submission%20ready-orange)
+&gt; A systematic, reproducible comparison of seven options pricing methodologies — from Black-Scholes to deep learning — benchmarked on 200 live SPY options.
 
-**Live demo:** [Streamlit Dashboard](http://localhost:8501)  
-**Paper PDF:** [`options-pricing-ml-Chaithanya-2026.pdf`](./options-pricing-ml-Chaithanya-2026.pdf)  
-**Paper draft (Markdown):** [`paper_draft.md`](./paper_draft.md)  
-**SSRN:** *Submission pending — link will appear here*  
-**LaTeX source:** [`options-pricing-ml-Chaithanya-2026.tex`](./options-pricing-ml-Chaithanya-2026.tex)
+[![Paper](https://img.shields.io/badge/SSRN-6955158-blue)](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=6955158)
+[![Python](https://img.shields.io/badge/Python-3.12-blue)](https://www.python.org/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.3-red)](https://pytorch.org/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-![Streamlit Dashboard](greeks_dashboard.png)
+&lt;p align="center"&gt;
+  &lt;img src="assets/bs_greeks_dashboard.png" alt="Black-Scholes Greeks Dashboard" width="800"/&gt;
+&lt;/p&gt;
+
+---
+
+## Overview
+
+This repository contains the complete implementation, training pipelines, and evaluation notebooks for the paper **"A Comparative Study of Numerical Methods for European Option Pricing"** (SSRN, 2026). The project implements and benchmarks seven distinct pricing methodologies:
+
+| Method | Type | Key Feature | Best For |
+|--------|------|-------------|----------|
+| **Black-Scholes** | Analytical | Closed-form, constant volatility | Ultra-fast European baseline |
+| **CRR Binomial Tree** | Numerical | Discrete-time lattice, early exercise | American options |
+| **Monte Carlo (GBM)** | Simulation | Path-dependent, variance reduction | Exotic derivatives |
+| **Heston Model** | Stochastic Vol | Per-option Nelder-Mead calibration | Smile-consistent pricing |
+| **MLP Pricer** | Deep Learning | Log-moneyness normalization | Batch risk calculations |
+| **LSTM-BS Hybrid** | Deep Learning | 30-day volatility forecasting | Dynamic regime adaptation |
+| **VAE-IV → BS** | Deep Learning | β-VAE implied volatility surfaces | IV surface interpolation |
+
+### Key Results
+
+The dynamically calibrated **Heston model** achieves the highest precision with a **MAE of 0.141** (95% CI: [0.11, 0.17]), accurately pricing **65% of options within 5%** of market mid-prices. The **LSTM-BS hybrid** achieves a competitive MAE of 0.448, outperforming constant-volatility baselines by incorporating dynamic volatility forecasts.
+
+---
+
+## Paper
+
+**A Comparative Study of Numerical Methods for European Option Pricing**  
+*Chaithanya L* — Independent Researcher, June 2026
+
+&gt; **Abstract:** Option pricing accuracy is paramount for effective risk management and derivative trading. This paper investigates the efficacy of seven distinct option pricing methods benchmarked against a live dataset of 200 SPY options collected in June 2026. The evaluated methods span classical frameworks (Black-Scholes, CRR binomial trees, Monte Carlo with variance reduction), stochastic volatility (the Heston model with per-option Nelder-Mead calibration), and modern deep learning architectures (MLP trained on log-moneyness, LSTM-BS hybrid, and a Variational Autoencoder for implied volatility surfaces). Results indicate that the dynamically calibrated Heston model achieves the highest precision with a Mean Absolute Error (MAE) of 0.141 (95% CI: [0.11, 0.17]), accurately pricing 65% of options within 5% of market midprices. The LSTM-BS hybrid achieves a competitive MAE of 0.448, outperforming constant-volatility baselines by incorporating dynamic volatility forecasts. These findings demonstrate that while deep learning provides computational and forecasting advantages, stochastic volatility models remain the optimal framework for pricing smile-consistent options, and Monte Carlo frameworks retain definitive superiority for path-dependent derivatives.
+
+📄 **[Read the Paper on SSRN](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=6955158)**  
+📄 **[Download PDF](options_paper_2026.pdf)**  
+📝 **[LaTeX Source](options_paper_2026.tex)**  
+📊 **[Interactive Dashboard](https://options-pricing-engine.streamlit.app)** *(if deployed)*
+
+**Keywords:** Option pricing, Black-Scholes, Heston model, Monte Carlo simulation, deep learning, LSTM, variational autoencoder, volatility smile, Diebold-Mariano test
 
 ---
 
 ## Mathematical Foundations
 
 ### Black-Scholes Model
-The classic Black-Scholes PDE is given by:
-$$ \frac{\partial V}{\partial t} + \frac{1}{2}\sigma^2 S^2 \frac{\partial^2 V}{\partial S^2} + rS \frac{\partial V}{\partial S} - rV = 0 $$
 
-With boundary conditions for a European Call option:
-$$ V(0, t) = 0 $$
-$$ V(S, t) \rightarrow S - K e^{-r(T-t)} \text{ as } S \rightarrow \infty $$
-$$ V(S, T) = \max(S - K, 0) $$
+The classic Black-Scholes PDE:
 
-The closed-form solution for a European Call is:
-$$ C(S, t) = S N(d_1) - K e^{-r(T-t)} N(d_2) $$
+$$\frac{\partial V}{\partial t} + \frac{1}{2}\sigma^2 S^2 \frac{\partial^2 V}{\partial S^2} + rS \frac{\partial V}{\partial S} - rV = 0$$
+
+Closed-form solution for a European Call:
+
+$$C(S, t) = S N(d_1) - K e^{-r(T-t)} N(d_2)$$
+
 where
-$$ d_1 = \frac{\ln(S/K) + (r + \frac{\sigma^2}{2})(T-t)}{\sigma\sqrt{T-t}} \quad \text{and} \quad d_2 = d_1 - \sigma\sqrt{T-t} $$
+
+$$d_1 = \frac{\ln(S/K) + (r + \sigma^2/2)(T-t)}{\sigma\sqrt{T-t}}, \quad d_2 = d_1 - \sigma\sqrt{T-t}$$
 
 ### Monte Carlo Simulation (GBM)
-Under the risk-neutral measure, the underlying asset follows a Geometric Brownian Motion (GBM):
-$$ dS_t = r S_t dt + \sigma S_t dW_t $$
-Where $dW_t$ is a standard Wiener process. The terminal price is simulated as:
-$$ S_T = S_0 \exp\left( \left( r - \frac{\sigma^2}{2} \right)T + \sigma \sqrt{T} Z \right), \quad Z \sim \mathcal{N}(0, 1) $$
+
+Under the risk-neutral measure, the terminal asset price is simulated as:
+
+$$S_T = S_0 \exp\left[ \left( r - \frac{\sigma^2}{2} \right)T + \sigma \sqrt{T} Z \right], \quad Z \sim \mathcal{N}(0, 1)$$
+
+We employ **antithetic variates** and **control variates** to reduce variance.
 
 ### Heston Stochastic Volatility Model
-The Heston model relaxes the constant volatility assumption by introducing a stochastic variance process:
-$$ dS_t = r S_t dt + \sqrt{v_t} S_t dW_{1,t} $$
-$$ dv_t = \kappa(\theta - v_t) dt + \sigma_v \sqrt{v_t} dW_{2,t} $$
-Where $dW_{1,t}$ and $dW_{2,t}$ are correlated Wiener processes with correlation $\rho$.
+
+The Heston model generalizes GBM by allowing volatility to evolve stochastically:
+
+$$dS_t = r S_t dt + \sqrt{v_t} S_t dW_{1,t}$$
+$$dv_t = \kappa(\theta - v_t) dt + \sigma_v \sqrt{v_t} dW_{2,t}$$
+
+where $\text{corr}(dW_{1,t}, dW_{2,t}) = \rho$ and the Feller condition $2\kappa\theta &gt; \sigma_v^2$ ensures positivity of variance.
+
+The model admits a closed-form solution via characteristic functions and Fourier inversion:
+
+$$P_j = \frac{1}{2} + \frac{1}{\pi} \int_0^\infty \text{Re}\left[ \frac{e^{-i\phi \ln K} f_j(\phi)}{i\phi} \right] d\phi$$
 
 ---
 
 ## Empirical Results
 
-| Method | MAE (all) | RMSE | % within 5% | MAE ATM | MAE OTM | Speed ms/opt | Best Use |
-|---|---|---|---|---|---|---|---|
-| Black-Scholes | 0.9058 | 1.4442 | 49.0% | 0.3790 | 0.0193 | 0.0096 | Fast European baseline |
-| CRR Binomial N=200 | 0.9053 | 1.4431 | 47.5% | 0.3793 | 0.0198 | 13.5539 | American / early-exercise |
-| Monte Carlo 100k | 0.9038 | 1.4459 | 50.5% | 0.3808 | 0.0199 | 1.2256 | Exotic / path-dependent |
-| LSTM-BS Hybrid | 1.0477 | 1.4902 | 41.0% | 1.2547 | 0.0413 | 0.0094 | Time-series vol forecasting |
-| MLP Pricer | 6.6577 | 7.3106 | 12.5% | 10.9255 | 5.1214 | 0.4861 | Ultra-fast batch pricing |
-| VAE-IV → BS | 2.4755 | 3.1479 | 25.5% | 4.2988 | 0.9144 | 0.0347 | IV surface interpolation |
-| Heston MC | 1.0402 | 1.5781 | 38.5% | 0.4550 | 0.1459 | 18.2100 | Stochastic vol / smile-consistent |
+Benchmarked on 200 live SPY options (June 2026), 80/20 stratified train-test split.
+
+| Method | MAE (SE) | RMSE (SE) | % within 5% | MAE ATM | MAE OTM | Speed (ms/opt) |
+|--------|----------|-----------|-------------|---------|---------|----------------|
+| **Heston MC (Calib.)** | **0.141 (0.012)** | **0.351 (0.028)** | **65.0%** | 0.090 | 0.018 | 18.84 |
+| LSTM-BS Hybrid | 0.448 (0.034) | 0.734 (0.061) | 41.5% | 1.152 | 0.028 | 0.01 |
+| Monte Carlo (100k) | 0.855 (0.042) | 1.266 (0.073) | 46.5% | 0.607 | 0.016 | 1.31 |
+| Black-Scholes | 0.861 (0.043) | 1.265 (0.072) | 45.0% | 0.603 | 0.016 | 0.01 |
+| CRR Binomial (N=200) | 0.861 (0.043) | 1.265 (0.072) | 44.5% | 0.605 | 0.017 | 14.44 |
+| VAE-IV → BS | 2.093 (0.156) | 2.907 (0.218) | 30.5% | 1.381 | 3.896 | 0.10 |
+| MLP Pricer | 3.374 (0.248) | 4.057 (0.312) | 27.0% | 5.184 | 1.209 | 0.04 |
+
+*Standard errors computed via bootstrap resampling (1,000 iterations). 95% CIs are bias-corrected and accelerated (BCa).*
 
 ### Key Findings
 
-Our comprehensive evaluation across 7 distinct methodologies yields clear insights into the trade-offs between computational efficiency, model accuracy, and real-world applicability. Traditional models, particularly the Black-Scholes closed-form solution and the Monte Carlo estimator (100k paths), consistently serve as robust baselines with MAEs hovering around ~0.90. While Black-Scholes boasts unparalleled speed (0.0096 ms/opt), the Monte Carlo approach demonstrates its strength in flexibility, readily adaptable for complex path-dependent and exotic derivatives despite a higher computational cost. Furthermore, the CRR Binomial Tree proves essential for American-style options where early exercise premiums are critical, maintaining an accuracy parallel to the classic baselines.
+1. **Stochastic volatility dominates.** The dynamically calibrated Heston model achieves state-of-the-art accuracy (MAE 0.141) due to its capacity to capture the empirical volatility smile through per-option parameter optimization.
 
-In the realm of deep learning and advanced stochastic volatility, the models exhibit nuanced performance characteristics. The Heston MC model accurately captures the empirical volatility smile and skew (MAE 1.04), vital for pricing away-from-the-money instruments, though it demands the highest computational overhead (18.21 ms/opt). Conversely, the MLP Pricer and VAE-IV frameworks showcase the incredible potential of neural architectures for ultra-fast batch processing and latent surface interpolation, but presently suffer in raw pricing accuracy, specifically near the ATM region. The LSTM-BS Hybrid model establishes a promising middle ground, leveraging sequential memory to forecast volatility inputs for Black-Scholes, achieving competitive latency and reasonable error metrics. Ultimately, model selection remains highly contingent on the specific requirements of the trading desk—whether prioritizing sub-millisecond execution, smile-consistent stochastic dynamics, or flexible exotic valuation.
+2. **Classical methods are statistically equivalent.** Black-Scholes, CRR, and Monte Carlo exhibit statistical parity (confirmed via Diebold-Mariano test, p &gt; 0.45), as their pricing errors stem inherently from the constant-volatility assumption.
+
+3. **Deep learning offers targeted advantages.** LSTM networks excel at time-series volatility forecasting (48% error reduction vs. baselines), VAEs generate arbitrage-free volatility surfaces for interpolation, and MLPs enable rapid batch evaluation despite limited accuracy in low-data regimes.
+
+4. **Monte Carlo remains essential for exotics.** The simulation framework is the definitive numerical method for path-dependent derivatives such as barrier options, handling knock-out conditions natively without structural modifications.
 
 ---
 
-## Quick Start
-
-You can get the full Options Pricing Engine and interactive Streamlit dashboard running locally in under 2 minutes.
+## Installation
 
 ```bash
+# Clone the repository
 git clone https://github.com/Chaithanya5gif/Options-pricing-engine.git
 cd Options-pricing-engine
+
+# Install dependencies
 pip install -r requirements.txt
-streamlit run app.py
-```
