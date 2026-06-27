@@ -48,7 +48,7 @@ def norm_pdf(x: float) -> float:
 
 
 def black_scholes(
-    S: float, K: float, T: float, r: float, sigma: float
+    S: float, K: float, T: float, r: float, sigma: float, q: float = 0.0
 ) -> Tuple[float, float]:
     """Compute Black-Scholes European call and put prices.
 
@@ -63,14 +63,15 @@ def black_scholes(
         Tuple[float, float]: A tuple containing (call_price, put_price).
     """
     # d1 and d2 — the heart of the model
-    d1 = (math.log(S / K) + (r + 0.5 * sigma**2) * T) / (sigma * math.sqrt(T))
+    d1 = (math.log(S / K) + (r - q + 0.5 * sigma**2) * T) / (sigma * math.sqrt(T))
     d2 = d1 - sigma * math.sqrt(T)
 
-    # Present value of the strike
+    # Present value of the strike and asset
     pv_K = K * math.exp(-r * T)
+    pv_S = S * math.exp(-q * T)
 
-    call_price = S * norm_cdf(d1) - pv_K * norm_cdf(d2)
-    put_price = pv_K * norm_cdf(-d2) - S * norm_cdf(-d1)
+    call_price = pv_S * norm_cdf(d1) - pv_K * norm_cdf(d2)
+    put_price = pv_K * norm_cdf(-d2) - pv_S * norm_cdf(-d1)
 
     return call_price, put_price
 
@@ -82,6 +83,7 @@ def implied_vol(
     T: float,
     r: float,
     option_type: str = "call",
+    q: float = 0.0,
 ) -> Optional[float]:
     """Calculate the implied volatility of a European option using the Newton-Raphson method.
 
@@ -104,7 +106,7 @@ def implied_vol(
     sigma = 0.2  # Initial guess
 
     for _ in range(MAX_ITERATIONS):
-        call_price, put_price = black_scholes(S, K, T, r, sigma)
+        call_price, put_price = black_scholes(S, K, T, r, sigma, q)
         bs_price = call_price if option_type == "call" else put_price
 
         price_diff = bs_price - market_price
@@ -127,7 +129,7 @@ def implied_vol(
 
     # Fallback to Brent's method if Newton-Raphson fails
     def target_function(v):
-        c, p = black_scholes(S, K, T, r, v)
+        c, p = black_scholes(S, K, T, r, v, q)
         bs_p = c if option_type == "call" else p
         return bs_p - market_price
 

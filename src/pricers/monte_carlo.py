@@ -33,13 +33,14 @@ def mc_price(
     T: float,
     r: float,
     sigma: float,
+    q: float = 0.0,
     n_paths: int = 100_000,
     option_type: str = "call",
     seed: int = 42,
 ) -> dict:
     """Basic Monte Carlo pricer — GBM terminal stock price, vectorised.
 
-    S_T = S0 × exp((r − 0.5σ²)T + σ√T × Z),   Z ~ N(0,1)
+    S_T = S0 × exp((r − q − 0.5σ²)T + σ√T × Z),   Z ~ N(0,1)
     Price = e^{−rT} × mean(max(S_T − K, 0))     [call]
 
     Args:
@@ -48,6 +49,7 @@ def mc_price(
         T (float): Time to expiry in years.
         r (float): Risk-free interest rate.
         sigma (float): Volatility.
+        q (float, optional): Dividend yield. Defaults to 0.0.
         n_paths (int, optional): Number of paths. Defaults to 100_000.
         option_type (str, optional): "call" or "put". Defaults to "call".
         seed (int, optional): Random seed. Defaults to 42.
@@ -59,7 +61,7 @@ def mc_price(
     t0 = time.perf_counter()
 
     Z = rng.standard_normal(n_paths)
-    S_T = S0 * np.exp((r - 0.5 * sigma**2) * T + sigma * math.sqrt(T) * Z)
+    S_T = S0 * np.exp((r - q - 0.5 * sigma**2) * T + sigma * math.sqrt(T) * Z)
 
     if option_type == "call":
         payoffs = np.maximum(S_T - K, 0.0)
@@ -88,16 +90,12 @@ def mc_antithetic(
     T: float,
     r: float,
     sigma: float,
+    q: float = 0.0,
     n_paths: int = 100_000,
     option_type: str = "call",
     seed: int = 42,
 ) -> dict:
-    """Monte Carlo with antithetic variates.
-
-    For each Z, also simulate −Z.  The antithetic pair payoffs are
-    averaged before taking the grand mean, which exploits the negative
-    correlation Cov(f(Z), f(−Z)) < 0 to cut variance by ~50%.
-    Same number of random draws → same computational cost as basic MC.
+    """Monte Carlo pricer with Antithetic Variates.
 
     Args:
         S0 (float): Current stock price.
@@ -105,22 +103,22 @@ def mc_antithetic(
         T (float): Time to expiry in years.
         r (float): Risk-free interest rate.
         sigma (float): Volatility.
+        q (float, optional): Dividend yield. Defaults to 0.0.
         n_paths (int, optional): Number of paths. Defaults to 100_000.
         option_type (str, optional): "call" or "put". Defaults to "call".
         seed (int, optional): Random seed. Defaults to 42.
-
-    Returns:
-        dict: A dictionary containing price, std_error, n_paths, elapsed_ms, method.
     """
     rng = np.random.default_rng(seed)
     t0 = time.perf_counter()
 
-    # Draw only n_paths/2 — pair each with its antithetic
+    if n_paths % 2 != 0:
+        n_paths += 1
+
     half = n_paths // 2
     Z = rng.standard_normal(half)
     Z_a = -Z  # antithetic pair
 
-    drift = (r - 0.5 * sigma**2) * T
+    drift = (r - q - 0.5 * sigma**2) * T
     diff = sigma * math.sqrt(T)
 
     S_T = S0 * np.exp(drift + diff * Z)
@@ -157,19 +155,12 @@ def mc_control_variate(
     T: float,
     r: float,
     sigma: float,
+    q: float = 0.0,
     n_paths: int = 100_000,
     option_type: str = "call",
     seed: int = 42,
 ) -> dict:
-    """Monte Carlo with control variate — stock price S_T as control.
-
-    Analytical: E[S_T] = S0 × e^{rT}   (risk-neutral)
-    Simulated:  mean(S_T)  ≠  E[S_T] due to sampling noise
-
-    Corrected estimator:
-      price_cv = price_raw − β × (mean(S_T) − E[S_T])
-    where β = Cov(payoff, S_T) / Var(S_T) is estimated from the same paths.
-    This removes the component of MC error that is correlated with S_T.
+    """Monte Carlo pricer using Stock Price as a Control Variate.
 
     Args:
         S0 (float): Current stock price.
@@ -177,18 +168,16 @@ def mc_control_variate(
         T (float): Time to expiry in years.
         r (float): Risk-free interest rate.
         sigma (float): Volatility.
+        q (float, optional): Dividend yield. Defaults to 0.0.
         n_paths (int, optional): Number of paths. Defaults to 100_000.
         option_type (str, optional): "call" or "put". Defaults to "call".
         seed (int, optional): Random seed. Defaults to 42.
-
-    Returns:
-        dict: A dictionary containing price, std_error, n_paths, elapsed_ms, method, beta.
     """
     rng = np.random.default_rng(seed)
     t0 = time.perf_counter()
 
     Z = rng.standard_normal(n_paths)
-    S_T = S0 * np.exp((r - 0.5 * sigma**2) * T + sigma * math.sqrt(T) * Z)
+    S_T = S0 * np.exp((r - q - 0.5 * sigma**2) * T + sigma * math.sqrt(T) * Z)
 
     if option_type == "call":
         payoffs = np.maximum(S_T - K, 0.0)
@@ -196,7 +185,8 @@ def mc_control_variate(
         payoffs = np.maximum(K - S_T, 0.0)
 
     disc = math.exp(-r * T)
-    E_S_T = S0 * math.exp(r * T)  # analytical expectation
+    # Expected value of S_T under Q is S0*exp((r-q)T)
+    E_S_T = S0 * math.exp((r - q) * T)  # analytical expectation
 
     # Estimate optimal beta via OLS
     cov_mat = np.cov(payoffs, S_T, ddof=1)
@@ -228,73 +218,7 @@ def mc_barrier_option(
     r: float,
     sigma: float,
     H: float,
-    barrier_type: str = "down-and-out",
-    option_type: str = "call",
-    n_paths: int = 100_000,
-    n_steps: int = 252,
-    seed: int = 42,
-) -> dict:
-    """Monte Carlo pricer for Barrier Options (e.g., Down-and-Out Call).
-
-    Path-dependent options require simulating the full path (Euler-Maruyama)
-    rather than just the terminal price. This highlights MC's structural
-    advantage over Black-Scholes.
-
-    Args:
-        S0 (float): Current stock price.
-        K (float): Strike price.
-        T (float): Time to expiry in years.
-        r (float): Risk-free interest rate.
-        sigma (float): Volatility.
-        H (float): Barrier level.
-        barrier_type (str): Type of barrier. Defaults to "down-and-out".
-        option_type (str): "call" or "put". Defaults to "call".
-        n_paths (int): Number of paths. Defaults to 100_000.
-        n_steps (int): Number of time steps. Defaults to 252.
-        seed (int): Random seed. Defaults to 42.
-
-    Returns:
-        dict: Pricing results.
-    """
-    rng = np.random.default_rng(seed)
-    t0 = time.perf_counter()
-
-    dt = T / n_steps
-    drift = (r - 0.5 * sigma**2) * dt
-    diff = sigma * math.sqrt(dt)
-
-    # Initialize paths
-    S = np.full(n_paths, S0, dtype=np.float64)
-    active = np.ones(n_paths, dtype=bool)
-
-    for _ in range(n_steps):
-        Z = rng.standard_normal(n_paths)
-        S = S * np.exp(drift + diff * Z)
-        
-        # Check barrier condition
-        if barrier_type == "down-and-out":
-            active &= (S > H)
-        elif barrier_type == "up-and-out":
-            active &= (S < H)
-        elif barrier_type == "down-and-in":
-            active |= (S <= H)
-        elif barrier_type == "up-and-in":
-            active |= (S >= H)
-
-    # Note: For "in" options, active starts as False and becomes True when barrier is breached.
-    # We initialize it to True above, so let's fix the logic for "in" options:
-    
-    # Correcting the implementation to handle "in" options properly:
-    # Actually, let's keep it simple and just re-do it properly inside the loop
-    pass
-
-def mc_barrier_option(
-    S0: float,
-    K: float,
-    T: float,
-    r: float,
-    sigma: float,
-    H: float,
+    q: float = 0.0,
     barrier_type: str = "down-and-out",
     option_type: str = "call",
     n_paths: int = 100_000,
@@ -305,7 +229,7 @@ def mc_barrier_option(
     t0 = time.perf_counter()
 
     dt = T / n_steps
-    drift = (r - 0.5 * sigma**2) * dt
+    drift = (r - q - 0.5 * sigma**2) * dt
     diff = sigma * math.sqrt(dt)
 
     S = np.full(n_paths, S0, dtype=np.float64)

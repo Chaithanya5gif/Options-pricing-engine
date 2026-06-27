@@ -50,16 +50,18 @@ def heston_mc_price(
     theta: float = 0.04,
     sigma_v: float = 0.3,
     rho: float = -0.7,
+    q: float = 0.0,
     n_paths: int = 50_000,
     n_steps: int = 252,
     option_type: str = "call",
+    exercise: str = "european",
     seed: int = 42,
 ) -> dict:
     """Heston MC pricer via Euler-Maruyama with antithetic variates.
 
     Discretisation (dt = T/N):
       v_{t+dt}  = max(v_t + κ(θ−v_t)dt + σᵥ·√(v_t·dt)·Z₂, 0)    [full truncation]
-      S_{t+dt}  = S_t · exp((r − ½·v_t)·dt + √(max(v_t,0)·dt)·Z₁) [log-Euler]
+      S_{t+dt}  = S_t · exp((r − q − ½·v_t)·dt + √(max(v_t,0)·dt)·Z₁) [log-Euler]
 
     Correlated Brownians:
       Z₁ ~ N(0,1),   Z₂ = ρ·Z₁ + √(1−ρ²)·Z₃,   Z₃ ~ N(0,1)
@@ -77,9 +79,11 @@ def heston_mc_price(
         theta (float, optional): Long-run variance. Defaults to 0.04.
         sigma_v (float, optional): Volatility of variance. Defaults to 0.3.
         rho (float, optional): Spot-vol correlation. Defaults to -0.7.
+        q (float, optional): Dividend yield. Defaults to 0.0.
         n_paths (int, optional): Number of MC paths. Defaults to 50_000.
         n_steps (int, optional): Time steps per path. Defaults to 252.
         option_type (str, optional): "call" or "put". Defaults to "call".
+        exercise (str, optional): "european" or "american". Defaults to "european".
         seed (int, optional): RNG seed. Defaults to 42.
 
     Returns:
@@ -97,7 +101,14 @@ def heston_mc_price(
     Sa = np.full(n_paths, S0, dtype=np.float64)  # antithetic
     va = np.full(n_paths, v0, dtype=np.float64)
 
-    for _ in range(n_steps):
+    if exercise == "american":
+        # Store full paths for Longstaff-Schwartz
+        # Shape: (n_steps + 1, 2 * n_paths) combining both antithetic branches
+        S_paths = np.zeros((n_steps + 1, 2 * n_paths), dtype=np.float64)
+        S_paths[0, :n_paths] = S0
+        S_paths[0, n_paths:] = S0
+
+    for step in range(n_steps):
         # Draw two independent standard normals  (shape: n_paths)
         Z1 = rng.standard_normal(n_paths)
         Z3 = rng.standard_normal(n_paths)
@@ -116,21 +127,71 @@ def heston_mc_price(
         va = np.maximum(va_new, 0.0)
 
         # ── Update log-spot (log-Euler to guarantee S > 0) ──
-        S = S * np.exp((r - 0.5 * v_pos) * dt + sv * Z1)
-        Sa = Sa * np.exp((r - 0.5 * va_pos) * dt + sva * (-Z1))
+        S = S * np.exp((r - q - 0.5 * v_pos) * dt + sv * Z1)
+        Sa = Sa * np.exp((r - q - 0.5 * va_pos) * dt + sva * (-Z1))
+
+        if exercise == "american":
+            S_paths[step + 1, :n_paths] = S
+            S_paths[step + 1, n_paths:] = Sa
 
     # ── Payoffs ──
-    if option_type == "call":
-        pay = np.maximum(S - K, 0.0)
-        paya = np.maximum(Sa - K, 0.0)
+    disc = math.exp(-r * dt)
+    
+    if exercise == "american":
+        # Longstaff-Schwartz Method (LSM)
+        if option_type == "call":
+            payoffs = np.maximum(S_paths[-1] - K, 0.0)
+        else:
+            payoffs = np.maximum(K - S_paths[-1], 0.0)
+            
+        value = payoffs.copy()
+        
+        for step in range(n_steps - 1, 0, -1):
+            S_t = S_paths[step]
+            if option_type == "call":
+                intrinsic = np.maximum(S_t - K, 0.0)
+            else:
+                intrinsic = np.maximum(K - S_t, 0.0)
+                
+            # Only regress on ITM paths
+            itm = intrinsic > 0
+            if np.sum(itm) > 0:
+                X = S_t[itm]
+                Y = value[itm] * disc
+                
+                # Regress Y on X, X^2
+                A = np.vstack([np.ones_like(X), X, X**2]).T
+                # Solve least squares
+                try:
+                    coeffs, _, _, _ = np.linalg.lstsq(A, Y, rcond=None)
+                    cont_value = coeffs[0] + coeffs[1] * X + coeffs[2] * X**2
+                    
+                    # Exercise if intrinsic > continuation value
+                    exercise_now = intrinsic[itm] > cont_value
+                    
+                    # Update value
+                    value[itm] = np.where(exercise_now, intrinsic[itm], Y)
+                except np.linalg.LinAlgError:
+                    value[itm] = Y
+            
+            # Discount paths that are not ITM (where we don't exercise)
+            value[~itm] = value[~itm] * disc
+            
+        # Final discount to t=0
+        price = value.mean() * disc
+        se = value.std(ddof=1) * disc / math.sqrt(2 * n_paths)
     else:
-        pay = np.maximum(K - S, 0.0)
-        paya = np.maximum(K - Sa, 0.0)
+        if option_type == "call":
+            pay = np.maximum(S - K, 0.0)
+            paya = np.maximum(Sa - K, 0.0)
+        else:
+            pay = np.maximum(K - S, 0.0)
+            paya = np.maximum(K - Sa, 0.0)
 
-    disc = math.exp(-r * T)
-    paired = 0.5 * (pay + paya)  # antithetic estimator
-    price = disc * paired.mean()
-    se = disc * paired.std(ddof=1) / math.sqrt(n_paths)
+        disc_T = math.exp(-r * T)
+        paired = 0.5 * (pay + paya)  # antithetic estimator
+        price = disc_T * paired.mean()
+        se = disc_T * paired.std(ddof=1) / math.sqrt(n_paths)
 
     return {
         "price": price,

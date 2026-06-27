@@ -27,7 +27,7 @@ from src.pricers.bs import black_scholes
 # ── 1. CRR Parameters ────────────────────────────────────────────────────────
 
 
-def crr_parameters(sigma: float, T: float, N: int, r: float):
+def crr_parameters(sigma: float, T: float, N: int, r: float, q: float = 0.0):
     """Compute the CRR up/down factors and risk-neutral probability.
 
     Args:
@@ -47,7 +47,7 @@ def crr_parameters(sigma: float, T: float, N: int, r: float):
     u = math.exp(sigma * math.sqrt(dt))
     d = 1.0 / u
     # Risk-neutral probability (must be in (0, 1) for a valid tree)
-    p = (math.exp(r * dt) - d) / (u - d)
+    p = (math.exp((r - q) * dt) - d) / (u - d)
 
     # Verification
     if not (0.0 < p < 1.0):
@@ -107,6 +107,7 @@ def price_option(
     N: int = 100,
     option_type: str = "call",  # "call" | "put"
     exercise: str = "european",  # "european" | "american"
+    q: float = 0.0,
 ) -> dict:
     """Price a European or American option using the CRR binomial tree.
 
@@ -128,7 +129,7 @@ def price_option(
             - gamma: numerical gamma
             - theta: numerical theta
     """
-    u, d, p, dt = crr_parameters(sigma, T, N, r)
+    u, d, p, dt = crr_parameters(sigma, T, N, r, q)
     disc = math.exp(-r * dt)  # one-step discount factor
 
     # ── Stock price tree (vectorised)
@@ -177,7 +178,7 @@ def price_option(
 
         # Option values at t=2 (backward 2 steps from payoffs — approximate)
         # Use full reprice at N=2 for Greeks
-        _, _, p2, _ = crr_parameters(sigma, T, 2, r)
+        _, _, p2, _ = crr_parameters(sigma, T, 2, r, q)
         S2_term = np.array([S0 * d**2, S0, S0 * u**2])
         if option_type == "call":
             pay2 = np.maximum(S2_term - K, 0.0)
@@ -199,7 +200,7 @@ def price_option(
         dt_1day = 1.0 / 365.0
         if T > dt_1day:
             price_plus1 = price_option(
-                S0, K, T - dt_1day, r, sigma, N, option_type, exercise
+                S0, K, T - dt_1day, r, sigma, N, option_type, exercise, q
             )["price"]
             theta = (price_plus1 - price) / dt_1day
         else:
@@ -231,6 +232,7 @@ def plot_convergence(
     T: float = 1.0,
     r: float = 0.05,
     sigma: float = 0.20,
+    q: float = 0.0,
     N_min: int = 10,
     N_max: int = 500,
     step: int = 5,
@@ -257,15 +259,15 @@ def plot_convergence(
 
     for n in Ns:
         eu_calls.append(
-            price_option(S0, K, T, r, sigma, n, "call", "european")["price"]
+            price_option(S0, K, T, r, sigma, n, "call", "european", q)["price"]
         )
-        eu_puts.append(price_option(S0, K, T, r, sigma, n, "put", "european")["price"])
+        eu_puts.append(price_option(S0, K, T, r, sigma, n, "put", "european", q)["price"])
         am_calls.append(
-            price_option(S0, K, T, r, sigma, n, "call", "american")["price"]
+            price_option(S0, K, T, r, sigma, n, "call", "american", q)["price"]
         )
-        am_puts.append(price_option(S0, K, T, r, sigma, n, "put", "american")["price"])
+        am_puts.append(price_option(S0, K, T, r, sigma, n, "put", "american", q)["price"])
 
-    bs_call, bs_put = black_scholes(S0, K, T, r, sigma)
+    bs_call, bs_put = black_scholes(S0, K, T, r, sigma, q)
 
     # ── Plot ────────────────────────────────────────────────────────────────
     plt.style.use("dark_background")
