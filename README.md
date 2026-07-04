@@ -1,16 +1,10 @@
 # Options Pricing Engine 📈
 
 
-&gt; A systematic, reproducible comparison of seven options pricing methodologies — from Black-Scholes to deep learning — benchmarked on 200 live SPY options.
 
-[![Paper](https://img.shields.io/badge/SSRN-6955158-blue)](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=6955158)
-[![Python](https://img.shields.io/badge/Python-3.12-blue)](https://www.python.org/)
-[![PyTorch](https://img.shields.io/badge/PyTorch-2.3-red)](https://pytorch.org/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-&lt;p align="center"&gt;
-  &lt;img src="assets/bs_greeks_dashboard.png" alt="Black-Scholes Greeks Dashboard" width="800"/&gt;
-&lt;/p&gt;
+
+
 
 ---
 
